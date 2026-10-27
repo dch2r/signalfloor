@@ -1,0 +1,42 @@
+# Workspace root. Not a package itself: each deployable or publishable unit
+# lives under packages/ and is a uv workspace member.
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "B",       # bugbear
+    "UP",      # pyupgrade
+    "SIM",     # simplify
+    "RUF",     # ruff-specific
+]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+mypy_path = "packages/signalfloor/src"
+packages = ["signalfloor"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+addopts = ["--strict-markers", "--import-mode=importlib"]
+
+[tool.coverage.run]
+source = ["signalfloor"]
+branch = true
