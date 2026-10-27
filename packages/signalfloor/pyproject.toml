@@ -18,6 +18,9 @@ dependencies = [
     "numpy>=1.26",
 ]
 
+[project.scripts]
+signalfloor = "signalfloor.cli:main"
+
 [project.urls]
 Repository = "https://github.com/dch2r/signalfloor"
 
