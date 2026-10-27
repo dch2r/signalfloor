@@ -1,15 +1,19 @@
 [project]
 name = "signalfloor"
-version = "0.0.1"
+version = "0.1.0"
 description = "Find out if a drop in your LLM eval scores is a real regression or just noise."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [{ name = "Diwesh Chaurasia" }]
+keywords = ["llm", "evaluation", "evals", "llm-as-judge", "regression testing", "bootstrap", "statistics"]
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
@@ -23,6 +27,8 @@ signalfloor = "signalfloor.cli:main"
 
 [project.urls]
 Repository = "https://github.com/dch2r/signalfloor"
+Issues = "https://github.com/dch2r/signalfloor/issues"
+Changelog = "https://github.com/dch2r/signalfloor/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling>=1.32.4"]
