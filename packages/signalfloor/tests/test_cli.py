@@ -158,7 +158,8 @@ def test_calibrate_trusted_judge_exits_0(
     assert code == EXIT_OK
     assert "cases       200" in out
     assert "labels      1, 2, 3, 4, 5" in out
-    assert "quadratic weighted kappa" in out
+    assert "weights     quadratic" in out
+    assert "kappa       0.99" in out
     assert "judge bias  +0.005  (more lenient than humans)" in out
     assert "verdict     trusted (threshold 0.6)" in out
 
@@ -174,6 +175,7 @@ def test_calibrate_always_pass_judge_exits_1(
     out = capsys.readouterr().out
     assert code == EXIT_UNTRUSTED
     assert "agreement   90.0%" in out
+    assert "weights     none" in out
     assert "kappa       0.000" in out
     assert "judge bias" not in out
     assert "verdict     not trusted" in out

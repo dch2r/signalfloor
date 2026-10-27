@@ -166,12 +166,12 @@ def _format_compare(r: Comparison) -> str:
 
 def _format_calibrate(r: Agreement) -> str:
     level = f"{r.confidence:.0%}"
-    kind = f"{r.weights} weighted kappa" if r.weights else "kappa"
     lines = [
         f"cases       {r.n_cases}",
         f"labels      {', '.join(str(c) for c in r.categories)}",
+        f"weights     {r.weights or 'none'}",
         f"agreement   {r.raw_agreement:.1%}",
-        f"{kind:<12}{r.kappa:.3f}  ({level} CI {r.ci_low:.3f} to {r.ci_high:.3f})",
+        f"kappa       {r.kappa:.3f}  ({level} CI {r.ci_low:.3f} to {r.ci_high:.3f})",
     ]
     if r.judge_bias is not None:
         lean = "more lenient" if r.judge_bias > 0 else "stricter" if r.judge_bias < 0 else "even"
