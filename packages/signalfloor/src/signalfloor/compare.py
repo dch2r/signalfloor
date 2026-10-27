@@ -13,9 +13,8 @@ from enum import StrEnum
 import numpy as np
 import numpy.typing as npt
 
-# Upper bound on how many resampled values we hold in memory at once. Keeps memory flat
-# for large suites: 10,000 resamples of 5,000 cases would otherwise be 400 MB.
-_MAX_CHUNK_ELEMENTS = 2_000_000
+from signalfloor._pairing import PairingError, examples, shared_case_ids
+from signalfloor._resample import resample_chunks
 
 
 class Verdict(StrEnum):
@@ -35,10 +34,6 @@ class Comparison:
     n_cases: int
     n_resamples: int
     verdict: Verdict
-
-
-class PairingError(ValueError):
-    """The two runs do not contain the same test cases."""
 
 
 def paired_bootstrap(
@@ -94,45 +89,24 @@ def paired_bootstrap(
 def _paired_arrays(
     baseline: Mapping[str, float], candidate: Mapping[str, float]
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    missing = baseline.keys() - candidate.keys()
-    extra = candidate.keys() - baseline.keys()
-    if missing or extra:
-        raise PairingError(
-            f"runs must contain the same cases: {len(missing)} only in baseline "
-            f"(e.g. {_examples(missing)}), {len(extra)} only in candidate "
-            f"(e.g. {_examples(extra)})"
-        )
-    if len(baseline) < 2:
-        raise ValueError(f"need at least 2 cases to compare, got {len(baseline)}")
-
-    ids = sorted(baseline)
+    ids = shared_case_ids(baseline, candidate, names=("baseline", "candidate"))
     base = np.array([baseline[i] for i in ids], dtype=np.float64)
     cand = np.array([candidate[i] for i in ids], dtype=np.float64)
 
     for name, arr in (("baseline", base), ("candidate", cand)):
         bad = [ids[i] for i in np.flatnonzero(~np.isfinite(arr))]
         if bad:
-            raise ValueError(f"{name} has non-finite scores for cases {_examples(set(bad))}")
+            raise ValueError(f"{name} has non-finite scores for cases {examples(bad)}")
     return base, cand
 
 
 def _bootstrap_means(
     diffs: npt.NDArray[np.float64], n_resamples: int, rng: np.random.Generator
 ) -> npt.NDArray[np.float64]:
-    n = diffs.size
-    chunk = max(1, _MAX_CHUNK_ELEMENTS // n)
     means = np.empty(n_resamples, dtype=np.float64)
-    for start in range(0, n_resamples, chunk):
-        size = min(chunk, n_resamples - start)
-        idx = rng.integers(0, n, size=(size, n))
-        means[start : start + size] = diffs[idx].mean(axis=1)
+    for where, idx in resample_chunks(diffs.size, n_resamples, rng):
+        means[where] = diffs[idx].mean(axis=1)
     return means
-
-
-def _examples(ids: set[str], limit: int = 3) -> str:
-    shown = sorted(ids)[:limit]
-    more = len(ids) - len(shown)
-    return ", ".join(shown) + (f" and {more} more" if more else "") if shown else "none"
 
 
 __all__ = ["Comparison", "PairingError", "Verdict", "paired_bootstrap"]
