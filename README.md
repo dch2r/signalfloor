@@ -25,8 +25,8 @@ signalfloor compares two eval runs and tells you if the difference is real.
 
 ## Status
 
-Early development. The `compare` and `calibrate` commands work today. Flaky case detection,
-trace ingestion and the CI integration are still to come.
+Early development. The `compare`, `calibrate` and `flaky` commands work today. Trace
+ingestion and the CI integration are still to come.
 
 ## Compare two eval runs
 
@@ -85,6 +85,32 @@ Use `--weights linear` or `--weights quadratic` for ordered ratings like 1 to 5,
 against a human 5 counts as close. The judge is trusted only when the whole confidence
 interval is above the threshold. With too few labelled cases the verdict is inconclusive
 and the command tells you to label more. It exits with code 0 only when the judge is trusted.
+
+## Find flaky cases and your noise floor
+
+Run the same eval a few times without changing anything, then pass all the result files:
+
+```console
+$ signalfloor flaky rerun1.jsonl rerun2.jsonl rerun3.jsonl rerun4.jsonl rerun5.jsonl
+runs        5
+cases       300
+run means   0.8367, 0.8400, 0.8367, 0.8233, 0.8267
+noise floor 0.0126
+noise band  +/-0.0246  (95% of reruns stay within this)
+flaky       27 of 300 cases (9.0%)
+
+case   spread  scores
+q-037  1.000   0 1 1 0 0
+q-040  1.000   1 1 0 0 1
+...
+```
+
+The noise band is the most useful number here. On this suite, any change smaller than about
+2.5 points could come from rerunning the same thing, so do not read anything into it.
+
+A case is flaky when its score moves between runs. By default any movement counts, which
+suits pass/fail scores. For continuous scores set `--tolerance`, for example 0.1. The command
+exits with code 1 when more than 5% of cases are flaky. Change that with `--max-flaky-rate`.
 
 ## Development
 
