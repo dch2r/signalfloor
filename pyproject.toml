@@ -44,3 +44,4 @@ addopts = ["--strict-markers", "--import-mode=importlib"]
 [tool.coverage.run]
 source = ["signalfloor"]
 branch = true
+omit = ["*/__main__.py"]
