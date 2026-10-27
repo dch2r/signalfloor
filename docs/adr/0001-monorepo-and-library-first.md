@@ -1,34 +1,34 @@
-# ADR 0001: Monorepo with a uv workspace, library first
+# ADR 0001: One repo, and the library comes first
 
-- **Status:** Accepted
-- **Date:** 2026-10-27
+- Status: Accepted
+- Date: 2026-10-27
 
 ## Context
 
-signalfloor will eventually have several deployable parts: a Python library and CLI,
-an API service, background eval workers, and a web dashboard. They share data models
-(eval runs, cases, scores) and must change together while the design is young.
+signalfloor will end up with several parts: a Python library with a command line tool, an API
+server, background workers that run evals, and a web dashboard. They all share the same data
+(eval runs, test cases, scores), and while the design is young they will change together a lot.
 
-The project's differentiator is statistical: deciding whether a score change between two
-eval runs is real or noise. That logic is useful on its own, without any server, database,
-or UI — for example as a single command in a CI job.
+The most important part is the statistics. Deciding if a score change between two runs is real
+or noise is useful on its own, with no server, database or UI. A team could use it as a single
+command in their CI job.
 
 ## Decision
 
-1. **One repository** containing every component, with Python packages managed as a
-   [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) under `packages/`.
-   One lockfile, one set of lint/type/test tooling at the root.
-2. **Build the core library first.** `packages/signalfloor` holds the statistics engine and
-   CLI, has no infrastructure dependencies, and is publishable to PyPI on its own. Services
-   added later depend on it rather than the other way around.
-3. **Strict quality gates from the first commit:** `ruff` for lint and format, `mypy --strict`,
-   `pytest` with coverage, pre-commit hooks, and CI on Python 3.11–3.13.
+1. Keep everything in one repository. The Python packages live under `packages/` and are managed
+   as a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/), with one lockfile
+   and one set of lint, type check and test tools at the root.
+2. Build the core library first. `packages/signalfloor` holds the statistics and the command line
+   tool. It has no infrastructure dependencies and can be published to PyPI by itself. Anything
+   we add later, like the API server, depends on this library and not the other way around.
+3. Turn on strict checks from the first commit: ruff for lint and formatting, mypy in strict mode,
+   pytest with coverage, pre-commit hooks, and CI on Python 3.11, 3.12 and 3.13.
 
 ## Consequences
 
-- A user can adopt the regression gate with `pip install signalfloor` before any hosted
-  component exists, which is the shortest path to real users.
-- The core stays free of web and database concerns, which keeps it fast to test.
-- Cross-cutting changes land in one pull request instead of coordinated releases.
-- When the TypeScript dashboard arrives it will need its own toolchain inside the same repo;
-  that is accepted in exchange for atomic changes across components.
+- People can start using the regression check with `pip install signalfloor` before any server
+  exists. That is the fastest way to get real users.
+- The core library stays free of web and database code, so its tests stay fast.
+- A change that touches several parts lands in one pull request.
+- The TypeScript dashboard will need its own tooling inside this repo. We accept that cost to
+  keep changes in one place.
