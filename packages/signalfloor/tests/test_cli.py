@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from signalfloor.cli import EXIT_OK, EXIT_REGRESSION, EXIT_UNTRUSTED, EXIT_USAGE, main
+from signalfloor.cli import (
+    EXIT_OK,
+    EXIT_REGRESSION,
+    EXIT_TOO_FLAKY,
+    EXIT_UNTRUSTED,
+    EXIT_USAGE,
+    main,
+)
 
 
 def write_run(path: Path, scores: list[float], id_key: str = "id", score_key: str = "score") -> str:
@@ -230,3 +237,79 @@ def test_calibrate_bad_labels_exit_2(tmp_path: Path, capsys: pytest.CaptureFixtu
 
     assert main(["calibrate", j, h, "--weights", "linear"]) == EXIT_USAGE
     assert "weighted kappa needs numeric labels" in capsys.readouterr().err
+
+
+def test_flaky_lists_cases_and_noise(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    stable = [1.0] * 18
+    paths = [
+        write_run(tmp_path / "r1.jsonl", [*stable, 1.0, 0.0]),
+        write_run(tmp_path / "r2.jsonl", [*stable, 0.0, 0.0]),
+        write_run(tmp_path / "r3.jsonl", [*stable, 1.0, 1.0]),
+    ]
+
+    code = main(["flaky", *paths])
+
+    out = capsys.readouterr().out
+    assert code == EXIT_TOO_FLAKY
+    assert "runs        3" in out
+    assert "cases       20" in out
+    assert "run means   0.9500, 0.9000, 1.0000" in out
+    assert "noise band  +/-" in out
+    assert "flaky       2 of 20 cases (10.0%)" in out
+    assert "case-18  1.000   1 0 1" in out
+    assert "case-19  1.000   0 0 1" in out
+
+
+def test_flaky_under_max_rate_exits_0(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    a = write_run(tmp_path / "a.jsonl", [1.0] * 9 + [1.0])
+    b = write_run(tmp_path / "b.jsonl", [1.0] * 9 + [0.0])
+
+    assert main(["flaky", a, b, "--max-flaky-rate", "0.1"]) == EXIT_OK
+    assert main(["flaky", a, b, "--max-flaky-rate", "0.05"]) == EXIT_TOO_FLAKY
+
+
+def test_flaky_with_no_flaky_cases(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    a = write_run(tmp_path / "a.jsonl", [0.5, 0.8])
+
+    assert main(["flaky", a, a]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "flaky       0 of 2 cases (0.0%)" in out
+    assert "spread" not in out
+
+
+def test_flaky_top_limits_the_list(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    a = write_run(tmp_path / "a.jsonl", [0.0] * 5)
+    b = write_run(tmp_path / "b.jsonl", [0.5, 0.4, 0.3, 0.2, 0.1])
+
+    main(["flaky", a, b, "--top", "2"])
+
+    out = capsys.readouterr().out
+    assert "case-0  0.500" in out
+    assert "case-1  0.400" in out
+    assert "case-2" not in out
+    assert "... and 3 more, use --top to see them" in out
+
+
+def test_flaky_tolerance_and_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    a = write_run(tmp_path / "a.jsonl", [0.80, 0.50])
+    b = write_run(tmp_path / "b.jsonl", [0.85, 0.10])
+
+    main(["flaky", a, b, "--tolerance", "0.1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["tolerance"] == 0.1
+    assert [f["case_id"] for f in data["flaky"]] == ["case-1"]
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [([], "at least 2 runs"), (["--max-flaky-rate", "1.5"], "--max-flaky-rate")],
+)
+def test_flaky_bad_input_exits_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], extra: list[str], message: str
+) -> None:
+    a = write_run(tmp_path / "a.jsonl", [1.0, 0.0])
+    paths = [a] if not extra else [a, a]
+
+    assert main(["flaky", *paths, *extra]) == EXIT_USAGE
+    assert message in capsys.readouterr().err
