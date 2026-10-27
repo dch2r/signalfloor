@@ -1,11 +1,12 @@
 import json
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from signalfloor.cli import EXIT_OK, EXIT_REGRESSION, EXIT_USAGE, main
+from signalfloor.cli import EXIT_OK, EXIT_REGRESSION, EXIT_UNTRUSTED, EXIT_USAGE, main
 
 
 def write_run(path: Path, scores: list[float], id_key: str = "id", score_key: str = "score") -> str:
@@ -134,3 +135,96 @@ def test_runs_as_installed_command(runs: dict[str, str]) -> None:
 
     assert proc.returncode == EXIT_REGRESSION
     assert "verdict     regression" in proc.stdout
+
+
+def write_labels(path: Path, values: Sequence[object]) -> str:
+    lines = [json.dumps({"id": f"case-{i}", "label": v}) for i, v in enumerate(values)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(path)
+
+
+def test_calibrate_trusted_judge_exits_0(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    human = [1, 2, 3, 4, 5] * 40
+    judge = list(human)
+    judge[0] = 2
+    j = write_labels(tmp_path / "j.jsonl", judge)
+    h = write_labels(tmp_path / "h.jsonl", human)
+
+    code = main(["calibrate", j, h, "--weights", "quadratic", "--seed", "0"])
+
+    out = capsys.readouterr().out
+    assert code == EXIT_OK
+    assert "cases       200" in out
+    assert "labels      1, 2, 3, 4, 5" in out
+    assert "quadratic weighted kappa" in out
+    assert "judge bias  +0.005  (more lenient than humans)" in out
+    assert "verdict     trusted (threshold 0.6)" in out
+
+
+def test_calibrate_always_pass_judge_exits_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    j = write_labels(tmp_path / "j.jsonl", ["pass"] * 100)
+    h = write_labels(tmp_path / "h.jsonl", ["pass"] * 90 + ["fail"] * 10)
+
+    code = main(["calibrate", j, h, "--seed", "0"])
+
+    out = capsys.readouterr().out
+    assert code == EXIT_UNTRUSTED
+    assert "agreement   90.0%" in out
+    assert "kappa       0.000" in out
+    assert "judge bias" not in out
+    assert "verdict     not trusted" in out
+
+
+def test_calibrate_few_labels_is_inconclusive_and_exits_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    human = [True, False, True, True, False, True, False, False, True, True]
+    judge = list(human)
+    judge[0] = False
+    j = write_labels(tmp_path / "j.jsonl", judge)
+    h = write_labels(tmp_path / "h.jsonl", human)
+
+    code = main(["calibrate", j, h, "--seed", "0"])
+
+    out = capsys.readouterr().out
+    assert code == EXIT_UNTRUSTED
+    assert "judge bias  -0.100  (stricter than humans)" in out
+    assert "inconclusive, label more cases" in out
+
+
+def test_calibrate_json_and_options(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    j = tmp_path / "j.jsonl"
+    h = tmp_path / "h.jsonl"
+    j.write_text('{"case": "a", "rating": 1}\n{"case": "b", "rating": 2}\n', encoding="utf-8")
+    h.write_text('{"case": "a", "rating": 1}\n{"case": "b", "rating": 2}\n', encoding="utf-8")
+
+    main(
+        [
+            "calibrate",
+            str(j),
+            str(h),
+            "--id-key=case",
+            "--label-key=rating",
+            "--threshold=0.5",
+            "--resamples=50",
+            "--format=json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["kappa"] == 1.0
+    assert data["threshold"] == 0.5
+    assert data["n_resamples"] == 50
+    assert data["judge_bias"] == 0.0
+
+
+def test_calibrate_bad_labels_exit_2(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    j = write_labels(tmp_path / "j.jsonl", ["good", "bad"])
+    h = write_labels(tmp_path / "h.jsonl", ["good", "bad"])
+
+    assert main(["calibrate", j, h, "--weights", "linear"]) == EXIT_USAGE
+    assert "weighted kappa needs numeric labels" in capsys.readouterr().err
