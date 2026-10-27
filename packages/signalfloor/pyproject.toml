@@ -14,7 +14,9 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "numpy>=1.26",
+]
 
 [project.urls]
 Repository = "https://github.com/dch2r/signalfloor"
