@@ -25,10 +25,10 @@ signalfloor compares two eval runs and tells you if the difference is real.
 
 ## Status
 
-Early development. The `compare` command works today. Judge calibration, flaky case detection,
+Early development. The `compare` and `calibrate` commands work today. Flaky case detection,
 trace ingestion and the CI integration are still to come.
 
-## Quick start
+## Compare two eval runs
 
 Save each eval run as a JSON Lines file with one test case per line:
 
@@ -52,6 +52,39 @@ verdict     regression
 The command exits with code 1 when the candidate is a real regression and 0 otherwise, so
 you can use it to fail a CI job. Run `signalfloor compare --help` to see all options,
 including `--format json` for machine readable output.
+
+## Check if your LLM judge can be trusted
+
+If an LLM judge scores your outputs, label a sample of the same cases yourself and check how
+often the judge agrees with you. Put the judge labels and the human labels in two files:
+
+```json
+{"id": "a-001", "label": 4}
+{"id": "a-002", "label": "good"}
+```
+
+Labels can be numbers, true/false or text. Then run:
+
+```console
+$ signalfloor calibrate judge.jsonl human.jsonl --weights quadratic
+cases       150
+labels      1, 2, 3, 4, 5
+weights     quadratic
+agreement   81.3%
+kappa       0.944  (95% CI 0.918 to 0.964)
+judge bias  +0.080  (more lenient than humans)
+
+verdict     trusted (threshold 0.6)
+```
+
+Plain agreement can fool you. If 90% of answers are good, a judge that always says "good"
+agrees with humans 90% of the time without checking anything. Cohen's kappa removes the
+agreement you would get by chance, so that judge scores 0.
+
+Use `--weights linear` or `--weights quadratic` for ordered ratings like 1 to 5, so a 4
+against a human 5 counts as close. The judge is trusted only when the whole confidence
+interval is above the threshold. With too few labelled cases the verdict is inconclusive
+and the command tells you to label more. It exits with code 0 only when the judge is trusted.
 
 ## Development
 
