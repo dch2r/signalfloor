@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from signalfloor.results import ResultsFileError, load_scores
+from signalfloor.results import ResultsFileError, load_labels, load_scores
 
 
 def write(tmp_path: Path, text: str) -> Path:
@@ -62,3 +62,26 @@ def test_bad_files_report_file_and_line(tmp_path: Path, text: str, message: str)
 def test_missing_file(tmp_path: Path) -> None:
     with pytest.raises(ResultsFileError, match="cannot read file"):
         load_scores(tmp_path / "nope.jsonl")
+
+
+def test_loads_labels_of_any_simple_type(tmp_path: Path) -> None:
+    path = write(
+        tmp_path,
+        '{"id": "a", "label": "good"}\n{"id": "b", "label": 4}\n{"id": "c", "label": true}\n',
+    )
+
+    assert load_labels(path) == {"a": "good", "b": 4, "c": True}
+
+
+def test_labels_with_custom_field_names(tmp_path: Path) -> None:
+    path = write(tmp_path, '{"case": "a", "verdict": "bad"}\n')
+
+    assert load_labels(path, id_key="case", label_key="verdict") == {"a": "bad"}
+
+
+@pytest.mark.parametrize("bad", ["null", "[1]", '{"x": 1}'])
+def test_labels_reject_non_scalar_values(tmp_path: Path, bad: str) -> None:
+    path = write(tmp_path, f'{{"id": "a", "label": {bad}}}\n')
+
+    with pytest.raises(ResultsFileError, match="'label' must be a number, boolean or string"):
+        load_labels(path)
