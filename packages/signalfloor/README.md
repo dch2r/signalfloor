@@ -1,6 +1,6 @@
 # signalfloor
 
-Know whether your LLM regression is real or just noise.
+Find out if a drop in your LLM eval scores is a real regression or just noise.
 
-Core Python library and CLI for [signalfloor](https://github.com/dch2r/signalfloor).
-Early development; not yet usable.
+This is the core Python library and command line tool for
+[signalfloor](https://github.com/dch2r/signalfloor). It is in early development and not usable yet.

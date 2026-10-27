@@ -1,4 +1,4 @@
-"""signalfloor: know whether your LLM regression is real or just noise."""
+"""signalfloor: find out if a drop in your LLM eval scores is real or just noise."""
 
 from importlib.metadata import version
 
