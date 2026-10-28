@@ -42,6 +42,22 @@ If the first search names a person, place or work you need to know more about, s
 When you know the answer, reply with only the answer: a name, a short phrase, a number, or
 yes or no. Do not explain."""
 
+# A second prompt aimed at the two failures seen on real questions: answering "Yes" to
+# questions that are not yes or no questions, and stopping after one search.
+SYSTEM_PROMPT_V2 = """You answer questions using a search tool over Wikipedia passages.
+
+Most questions need two facts from two different passages, so you usually need two searches.
+Search for one thing at a time. After the first search, find the person, place or work you
+still need to know about and search for it.
+
+Answer yes or no only when the question itself is a yes or no question, such as one that
+starts with Are, Is, Was, Were, Do or Did. Otherwise answer with the name, phrase or number
+the question asks for.
+
+Reply with only the answer. Do not explain."""
+
+PROMPTS = {"v1": SYSTEM_PROMPT, "v2": SYSTEM_PROMPT_V2}
+
 FINALIZE_PROMPT = (
     "You have used all your searches. Give your best answer now. "
     "Reply with only the answer, no explanation."
@@ -56,6 +72,7 @@ _TOOL_CALL_WRAPPER = re.compile(r"</?tool_call>|^```(json)?|```$", re.MULTILINE)
 class AgentConfig:
     max_searches: int = 4
     passages_per_search: int = 4
+    system_prompt: str = SYSTEM_PROMPT
 
     def __post_init__(self) -> None:
         if self.max_searches < 1:
@@ -100,7 +117,7 @@ class Agent:
 
     def answer(self, question: str) -> AgentResult:
         initial: AgentState = {
-            "messages": [SystemMessage(SYSTEM_PROMPT), HumanMessage(question)],
+            "messages": [SystemMessage(self.config.system_prompt), HumanMessage(question)],
             "searches": [],
             "retrieved_titles": [],
         }
