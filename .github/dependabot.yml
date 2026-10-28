@@ -31,3 +31,19 @@ updates:
       # Next.js, React and their types move together. One PR instead of five.
       react-and-next:
         patterns: ["next", "eslint-config-next", "react", "react-dom", "@types/react*"]
+
+  # Base images in the Dockerfiles and docker-compose.yml are pinned by digest. These keep the
+  # digests current.
+  - package-ecosystem: docker
+    directories: ["/packages/server", "/dashboard"]
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
