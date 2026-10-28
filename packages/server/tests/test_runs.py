@@ -237,3 +237,74 @@ def test_upload_rejects_bad_trace_ids(client: TestClient, trace_id: str) -> None
     body["cases"][0]["trace_id"] = trace_id
 
     assert client.post("/runs", json=body).status_code == 422
+
+
+def test_diff_lists_the_biggest_drops_and_gains(client: TestClient) -> None:
+    baseline = client.post(
+        "/runs",
+        json={
+            "name": "base",
+            "cases": [
+                {"id": "a", "score": 1.0, "trace_id": "a" * 32},
+                {"id": "b", "score": 1.0},
+                {"id": "c", "score": 0.5},
+                {"id": "d", "score": 0.0},
+                {"id": "e", "score": 0.5},
+                {"id": "only-base", "score": 1.0},
+            ],
+        },
+    ).json()["id"]
+    candidate = client.post(
+        "/runs",
+        json={
+            "name": "cand",
+            "cases": [
+                {"id": "a", "score": 0.0, "trace_id": "b" * 32},
+                {"id": "b", "score": 0.5},
+                {"id": "c", "score": 0.5},
+                {"id": "d", "score": 1.0},
+                {"id": "e", "score": 0.75},
+                {"id": "only-cand-1", "score": 1.0},
+                {"id": "only-cand-2", "score": 1.0},
+            ],
+        },
+    ).json()["id"]
+
+    result = client.get(f"/runs/{baseline}/diff/{candidate}").json()
+
+    assert {k: result[k] for k in ("n_shared", "n_worse", "n_better", "n_same")} == {
+        "n_shared": 5,
+        "n_worse": 2,
+        "n_better": 2,
+        "n_same": 1,
+    }
+    assert (result["only_in_baseline"], result["only_in_candidate"]) == (1, 2)
+    assert [(c["case_id"], c["delta"]) for c in result["worst"]] == [("a", -1.0), ("b", -0.5)]
+    assert [(c["case_id"], c["delta"]) for c in result["best"]] == [("d", 1.0), ("e", 0.25)]
+    assert result["worst"][0] == {
+        "case_id": "a",
+        "baseline_score": 1.0,
+        "candidate_score": 0.0,
+        "delta": -1.0,
+        "baseline_trace_id": "a" * 32,
+        "candidate_trace_id": "b" * 32,
+    }
+
+
+def test_diff_limit(client: TestClient) -> None:
+    baseline = upload(client, "base", [1.0] * 10)["id"]
+    candidate = upload(client, "cand", [0.0] * 10)["id"]
+
+    result = client.get(f"/runs/{baseline}/diff/{candidate}", params={"limit": 3}).json()
+
+    assert result["n_worse"] == 10
+    assert len(result["worst"]) == 3
+    assert result["best"] == []
+
+
+def test_diff_with_a_missing_run(client: TestClient) -> None:
+    run_id = upload(client)["id"]
+
+    response = client.get(f"/runs/{run_id}/diff/{uuid.uuid4()}")
+
+    assert response.status_code == 404

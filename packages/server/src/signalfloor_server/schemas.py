@@ -86,6 +86,28 @@ class CaseOut(BaseModel):
     spans: list[SpanOut]
 
 
+class CaseDiff(BaseModel):
+    case_id: str
+    baseline_score: float
+    candidate_score: float
+    delta: float
+    baseline_trace_id: str | None
+    candidate_trace_id: str | None
+
+
+class RunDiffOut(BaseModel):
+    baseline_id: uuid.UUID
+    candidate_id: uuid.UUID
+    n_shared: int
+    n_worse: int
+    n_better: int
+    n_same: int
+    only_in_baseline: int
+    only_in_candidate: int
+    worst: list[CaseDiff]
+    best: list[CaseDiff]
+
+
 # A background comparison can afford far more resamples than a request can.
 MAX_JOB_RESAMPLES = 1_000_000
 
