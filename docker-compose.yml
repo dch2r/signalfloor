@@ -1,0 +1,72 @@
+# The whole stack on one machine: Postgres, migrations, the API, the worker and the dashboard.
+#
+#   docker compose up --build
+#
+# Then open http://localhost:3000. The passwords here are for local use only.
+
+x-server: &server
+  build:
+    context: .
+    dockerfile: packages/server/Dockerfile
+  image: signalfloor-server:local
+  environment:
+    SIGNALFLOOR_DATABASE_URL: postgresql+asyncpg://signalfloor:signalfloor@postgres:5432/signalfloor
+
+services:
+  postgres:
+    image: postgres:18@sha256:979bccfde35445db618c65107d27d08c6c21339d8dc3ad4c830c6633947be0e4
+    environment:
+      POSTGRES_USER: signalfloor
+      POSTGRES_PASSWORD: signalfloor
+      POSTGRES_DB: signalfloor
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "signalfloor"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  migrate:
+    <<: *server
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *server
+    ports: ["8000:8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # The slim image has no curl, so Python does the request.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    <<: *server
+    command: ["worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  dashboard:
+    build: dashboard
+    image: signalfloor-dashboard:local
+    ports: ["3000:3000"]
+    environment:
+      SIGNALFLOOR_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
