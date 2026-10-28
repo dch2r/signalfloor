@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-signalfloor-server = "signalfloor_server.__main__:main"
+signalfloor-server = "signalfloor_server.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.32.4"]
