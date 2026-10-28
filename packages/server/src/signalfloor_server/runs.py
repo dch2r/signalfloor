@@ -10,10 +10,10 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from signalfloor_server.comparisons import RunNotFound, compare
+from signalfloor_server.comparisons import RunNotFound, compare, diff
 from signalfloor_server.db import Session
 from signalfloor_server.models import CaseResult, Run
-from signalfloor_server.schemas import CaseOut, ComparisonOut, RunIn, RunOut
+from signalfloor_server.schemas import CaseOut, ComparisonOut, RunDiffOut, RunIn, RunOut
 from signalfloor_server.traces import load_spans
 
 MAX_RESAMPLES = 100_000
@@ -108,6 +108,20 @@ async def compare_runs(
         raise HTTPException(404, str(e)) from e
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
+
+
+@router.get("/{baseline_id}/diff/{candidate_id}")
+async def diff_runs(
+    baseline_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
+) -> RunDiffOut:
+    """How many cases got worse or better, and the `limit` biggest drops and gains."""
+    try:
+        return await diff(session, baseline_id, candidate_id, limit=limit)
+    except RunNotFound as e:
+        raise HTTPException(404, str(e)) from e
 
 
 async def _get(session: AsyncSession, run_id: uuid.UUID) -> Run:

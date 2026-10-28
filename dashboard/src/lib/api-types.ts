@@ -119,6 +119,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{baseline_id}/diff/{candidate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diff Runs
+         * @description How many cases got worse or better, and the `limit` biggest drops and gains.
+         */
+        get: operations["diff_runs_runs__baseline_id__diff__candidate_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/traces": {
         parameters: {
             query?: never;
@@ -200,6 +220,21 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CaseDiff */
+        CaseDiff: {
+            /** Case Id */
+            case_id: string;
+            /** Baseline Score */
+            baseline_score: number;
+            /** Candidate Score */
+            candidate_score: number;
+            /** Delta */
+            delta: number;
+            /** Baseline Trace Id */
+            baseline_trace_id: string | null;
+            /** Candidate Trace Id */
+            candidate_trace_id: string | null;
+        };
         /** CaseIn */
         CaseIn: {
             /** Id */
@@ -309,6 +344,35 @@ export interface components {
             started_at: string | null;
             /** Finished At */
             finished_at: string | null;
+        };
+        /** RunDiffOut */
+        RunDiffOut: {
+            /**
+             * Baseline Id
+             * Format: uuid
+             */
+            baseline_id: string;
+            /**
+             * Candidate Id
+             * Format: uuid
+             */
+            candidate_id: string;
+            /** N Shared */
+            n_shared: number;
+            /** N Worse */
+            n_worse: number;
+            /** N Better */
+            n_better: number;
+            /** N Same */
+            n_same: number;
+            /** Only In Baseline */
+            only_in_baseline: number;
+            /** Only In Candidate */
+            only_in_candidate: number;
+            /** Worst */
+            worst: components["schemas"]["CaseDiff"][];
+            /** Best */
+            best: components["schemas"]["CaseDiff"][];
         };
         /** RunIn */
         RunIn: {
@@ -620,6 +684,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComparisonOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    diff_runs_runs__baseline_id__diff__candidate_id__get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                baseline_id: string;
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDiffOut"];
                 };
             };
             /** @description Validation Error */

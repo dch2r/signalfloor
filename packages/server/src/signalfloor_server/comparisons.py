@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from starlette.concurrency import run_in_threadpool
 
 from signalfloor.compare import paired_bootstrap
 from signalfloor_server.models import CaseResult, Run
-from signalfloor_server.schemas import ComparisonOut
+from signalfloor_server.schemas import CaseDiff, ComparisonOut, RunDiffOut
 
 
 class RunNotFound(LookupError):
@@ -64,3 +65,75 @@ async def scores(session: AsyncSession, run_id: uuid.UUID) -> dict[str, float]:
         select(CaseResult.case_id, CaseResult.score).where(CaseResult.run_id == run_id)
     )
     return {case_id: score for case_id, score in rows}
+
+
+async def diff(
+    session: AsyncSession, baseline_id: uuid.UUID, candidate_id: uuid.UUID, *, limit: int
+) -> RunDiffOut:
+    """Case by case changes between two runs: counts, and the biggest drops and gains.
+
+    Only cases in both runs are paired. Cases in just one run are counted, not compared.
+    """
+    runs = {}
+    for run_id in (baseline_id, candidate_id):
+        run = await session.get(Run, run_id)
+        if run is None:
+            raise RunNotFound(run_id)
+        runs[run_id] = run
+
+    base = aliased(CaseResult)
+    cand = aliased(CaseResult)
+    delta = (cand.score - base.score).label("delta")
+    paired = (
+        select(
+            base.case_id,
+            base.score,
+            cand.score,
+            delta,
+            base.trace_id,
+            cand.trace_id,
+        )
+        .join(cand, and_(cand.case_id == base.case_id, cand.run_id == candidate_id))
+        .where(base.run_id == baseline_id)
+    )
+
+    shared = paired.subquery()
+    counts = (
+        await session.execute(
+            select(
+                func.count(),
+                func.count().filter(shared.c.delta < 0),
+                func.count().filter(shared.c.delta > 0),
+            )
+        )
+    ).one()
+    n_shared, n_worse, n_better = counts
+
+    async def cases(
+        query: Select[str, float, float, float, str | None, str | None],
+    ) -> list[CaseDiff]:
+        rows = await session.execute(query.limit(limit))
+        return [
+            CaseDiff(
+                case_id=case_id,
+                baseline_score=b,
+                candidate_score=c,
+                delta=d,
+                baseline_trace_id=bt,
+                candidate_trace_id=ct,
+            )
+            for case_id, b, c, d, bt, ct in rows
+        ]
+
+    return RunDiffOut(
+        baseline_id=baseline_id,
+        candidate_id=candidate_id,
+        n_shared=n_shared,
+        n_worse=n_worse,
+        n_better=n_better,
+        n_same=n_shared - n_worse - n_better,
+        only_in_baseline=runs[baseline_id].n_cases - n_shared,
+        only_in_candidate=runs[candidate_id].n_cases - n_shared,
+        worst=await cases(paired.where(delta < 0).order_by(delta, base.case_id)),
+        best=await cases(paired.where(delta > 0).order_by(delta.desc(), base.case_id)),
+    )

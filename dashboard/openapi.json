@@ -401,6 +401,72 @@
         }
       }
     },
+    "/runs/{baseline_id}/diff/{candidate_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Diff Runs",
+        "description": "How many cases got worse or better, and the `limit` biggest drops and gains.",
+        "operationId": "diff_runs_runs__baseline_id__diff__candidate_id__get",
+        "parameters": [
+          {
+            "name": "baseline_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Baseline Id"
+            }
+          },
+          {
+            "name": "candidate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Candidate Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDiffOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/traces": {
       "post": {
         "tags": [
@@ -556,6 +622,58 @@
   },
   "components": {
     "schemas": {
+      "CaseDiff": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "baseline_score": {
+            "type": "number",
+            "title": "Baseline Score"
+          },
+          "candidate_score": {
+            "type": "number",
+            "title": "Candidate Score"
+          },
+          "delta": {
+            "type": "number",
+            "title": "Delta"
+          },
+          "baseline_trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Trace Id"
+          },
+          "candidate_trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Trace Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "baseline_score",
+          "candidate_score",
+          "delta",
+          "baseline_trace_id",
+          "candidate_trace_id"
+        ],
+        "title": "CaseDiff"
+      },
       "CaseIn": {
         "properties": {
           "id": {
@@ -835,6 +953,72 @@
           "finished_at"
         ],
         "title": "JobOut"
+      },
+      "RunDiffOut": {
+        "properties": {
+          "baseline_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Baseline Id"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Candidate Id"
+          },
+          "n_shared": {
+            "type": "integer",
+            "title": "N Shared"
+          },
+          "n_worse": {
+            "type": "integer",
+            "title": "N Worse"
+          },
+          "n_better": {
+            "type": "integer",
+            "title": "N Better"
+          },
+          "n_same": {
+            "type": "integer",
+            "title": "N Same"
+          },
+          "only_in_baseline": {
+            "type": "integer",
+            "title": "Only In Baseline"
+          },
+          "only_in_candidate": {
+            "type": "integer",
+            "title": "Only In Candidate"
+          },
+          "worst": {
+            "items": {
+              "$ref": "#/components/schemas/CaseDiff"
+            },
+            "type": "array",
+            "title": "Worst"
+          },
+          "best": {
+            "items": {
+              "$ref": "#/components/schemas/CaseDiff"
+            },
+            "type": "array",
+            "title": "Best"
+          }
+        },
+        "type": "object",
+        "required": [
+          "baseline_id",
+          "candidate_id",
+          "n_shared",
+          "n_worse",
+          "n_better",
+          "n_same",
+          "only_in_baseline",
+          "only_in_candidate",
+          "worst",
+          "best"
+        ],
+        "title": "RunDiffOut"
       },
       "RunIn": {
         "properties": {
