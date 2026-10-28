@@ -44,9 +44,17 @@ Python 3.11 or newer is needed.
 
 ## Status
 
-Alpha. The `compare`, `calibrate` and `flaky` commands and the GitHub Action work today.
-Trace ingestion is next. See the [changelog](CHANGELOG.md) for what changed in
-each release.
+Alpha. The `compare`, `calibrate` and `flaky` commands and the GitHub Action work today. See
+the [changelog](CHANGELOG.md) for what changed in each release.
+
+The repository has four parts:
+
+| Part | What it is |
+|---|---|
+| [packages/signalfloor](packages/signalfloor) | The library and CLI, published to PyPI |
+| [packages/agent](packages/agent) | A LangGraph agent used to test signalfloor on real output |
+| [packages/server](packages/server) | An API that stores runs and traces and compares runs |
+| [dashboard](dashboard) | A Next.js web view of the stored runs |
 
 ## See it on a real agent
 
