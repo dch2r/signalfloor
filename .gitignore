@@ -230,3 +230,4 @@ node_modules/
 .idea/
 .vscode/
 loadtest/summary.md
+loadtest/results.csv

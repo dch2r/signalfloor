@@ -23,11 +23,25 @@ jobs:
         run: |
           docker compose up --detach --build --wait api
           nproc
-      - name: Run k6
+      - name: Steady load
         run: k6 run loadtest/api.js
-      - name: Publish the summary
+      - name: Publish the steady summary
         if: always()
         run: cat loadtest/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Stress, ramping up until something gives
+        # Thresholds are expected to break here, so a crossed threshold doesn't fail the job.
+        run: k6 run -e PROFILE=stress --out csv=loadtest/results.csv loadtest/api.js || true
+      - name: Publish latency over time
+        if: always()
+        run: |
+          {
+            echo "## Stress, latency over time"
+            echo
+            python3 loadtest/report.py loadtest/results.csv
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Show resource use
+        if: always()
+        run: docker stats --no-stream
       - name: Show API logs
         if: failure()
         run: docker compose logs api --tail=100
