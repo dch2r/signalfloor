@@ -41,3 +41,43 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --locked
       - run: uv run pytest --cov --cov-report=term-missing
+
+  action:
+    name: GitHub Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compare with no real change should pass
+        uses: ./
+        with:
+          command: compare
+          files: examples/baseline.jsonl examples/candidate-same.jsonl
+          options: --seed 0
+
+      - name: Calibrate a good judge should pass
+        uses: ./
+        with:
+          command: calibrate
+          files: |
+            examples/judge.jsonl
+            examples/human.jsonl
+          options: --weights quadratic --seed 0
+
+      - name: Compare with a real regression should fail
+        id: regression
+        continue-on-error: true
+        uses: ./
+        with:
+          command: compare
+          files: examples/baseline.jsonl examples/candidate-worse.jsonl
+          options: --seed 0
+
+      - name: Check the regression step failed with exit code 1
+        env:
+          OUTCOME: ${{ steps.regression.outcome }}
+          EXIT_CODE: ${{ steps.regression.outputs.exit-code }}
+        run: |
+          echo "outcome=$OUTCOME exit-code=$EXIT_CODE"
+          test "$OUTCOME" = failure
+          test "$EXIT_CODE" = 1
