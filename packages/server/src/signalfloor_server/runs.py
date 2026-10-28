@@ -9,9 +9,8 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
 
-from signalfloor.compare import paired_bootstrap
+from signalfloor_server.comparisons import RunNotFound, compare
 from signalfloor_server.db import Session
 from signalfloor_server.models import CaseResult, Run
 from signalfloor_server.schemas import CaseOut, ComparisonOut, RunIn, RunOut
@@ -92,34 +91,23 @@ async def compare_runs(
     n_resamples: Annotated[int, Query(ge=100, le=MAX_RESAMPLES)] = 10_000,
     seed: Annotated[int | None, Query(ge=0)] = None,
 ) -> ComparisonOut:
-    """Paired bootstrap of candidate minus baseline, the same test as `signalfloor compare`."""
-    baseline = await _scores(session, baseline_id)
-    candidate = await _scores(session, candidate_id)
+    """Paired bootstrap of candidate minus baseline, the same test as `signalfloor compare`.
+
+    For more resamples than this endpoint allows, use POST /jobs/compare.
+    """
     try:
-        # The bootstrap is CPU bound. Run it in a thread so other requests keep being served.
-        result = await run_in_threadpool(
-            paired_bootstrap,
-            baseline,
-            candidate,
+        return await compare(
+            session,
+            baseline_id,
+            candidate_id,
             confidence=confidence,
             n_resamples=n_resamples,
             seed=seed,
         )
+    except RunNotFound as e:
+        raise HTTPException(404, str(e)) from e
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
-    return ComparisonOut(
-        baseline_id=baseline_id,
-        candidate_id=candidate_id,
-        baseline_mean=result.baseline_mean,
-        candidate_mean=result.candidate_mean,
-        delta=result.delta,
-        ci_low=result.ci_low,
-        ci_high=result.ci_high,
-        confidence=result.confidence,
-        n_cases=result.n_cases,
-        n_resamples=result.n_resamples,
-        verdict=result.verdict.value,
-    )
 
 
 async def _get(session: AsyncSession, run_id: uuid.UUID) -> Run:
@@ -127,14 +115,6 @@ async def _get(session: AsyncSession, run_id: uuid.UUID) -> Run:
     if run is None:
         raise HTTPException(404, f"run {run_id} not found")
     return run
-
-
-async def _scores(session: AsyncSession, run_id: uuid.UUID) -> dict[str, float]:
-    await _get(session, run_id)
-    rows = await session.execute(
-        select(CaseResult.case_id, CaseResult.score).where(CaseResult.run_id == run_id)
-    )
-    return {case_id: score for case_id, score in rows}
 
 
 def _parse_labels(pairs: list[str]) -> dict[str, str]:
