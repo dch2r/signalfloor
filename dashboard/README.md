@@ -3,7 +3,20 @@
 A web view of the eval runs stored in [signalfloor-server](../packages/server/README.md). Built
 with Next.js and TypeScript.
 
-So far it lists runs. Comparing two runs and opening a case's trace come next.
+It has two pages so far:
+
+- **Runs** lists every run, newest first, with a form to pick two runs to compare.
+- **Compare** says whether the candidate is a real regression, a real improvement or noise,
+  draws the confidence interval against zero, and lists the cases that dropped or gained the
+  most.
+
+The compare page answers with the same paired bootstrap as `signalfloor compare`, with a fixed
+seed so the interval doesn't move when you reload. Its URL holds both run ids, so a comparison
+can be shared as a link.
+
+For the two prompt versions of the reference agent it shows a real improvement of +0.083, and
+also that the gain is a net one: 22 questions got better and 12 got worse. One question that v1
+answered perfectly scored 0 with v2. Opening a case's trace comes next.
 
 ## Running it
 
