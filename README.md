@@ -1,5 +1,10 @@
 # signalfloor
 
+[![PyPI](https://img.shields.io/pypi/v/signalfloor)](https://pypi.org/project/signalfloor/)
+[![Python](https://img.shields.io/pypi/pyversions/signalfloor)](https://pypi.org/project/signalfloor/)
+[![CI](https://github.com/dch2r/signalfloor/actions/workflows/ci.yml/badge.svg)](https://github.com/dch2r/signalfloor/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
 Find out if a drop in your LLM eval scores is a real regression or just noise.
 
 ## The problem
@@ -23,10 +28,25 @@ signalfloor compares two eval runs and tells you if the difference is real.
 - It reads OpenTelemetry traces, so you can use it alongside tools like Langfuse or Phoenix.
 - It runs in CI and fails a pull request only when a regression is statistically real.
 
+## Install
+
+```bash
+pip install signalfloor
+```
+
+Or run it without installing, using [uv](https://docs.astral.sh/uv/):
+
+```bash
+uvx signalfloor --help
+```
+
+Python 3.11 or newer is needed.
+
 ## Status
 
-Early development. The `compare`, `calibrate` and `flaky` commands work today. Trace
-ingestion and the CI integration are still to come.
+Alpha. The `compare`, `calibrate` and `flaky` commands work today. Trace ingestion and a
+ready made GitHub Action are next. See the [changelog](CHANGELOG.md) for what changed in
+each release.
 
 ## Compare two eval runs
 
@@ -114,7 +134,7 @@ exits with code 1 when more than 5% of cases are flaky. Change that with `--max-
 
 ## Development
 
-You need [uv](https://docs.astral.sh/uv/) installed. Then:
+To work on signalfloor itself you need [uv](https://docs.astral.sh/uv/) installed. Then:
 
 ```bash
 git clone https://github.com/dch2r/signalfloor.git
@@ -123,6 +143,8 @@ uv sync
 uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
 uv run pytest
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to send a change.
 
 ## License
 
