@@ -170,6 +170,18 @@ an `exit-code` output.
 
 Want to try everything first? The [examples](examples) folder has small result files.
 
+## Run the whole stack
+
+With Docker installed, one command starts Postgres, the API, the background worker and the
+dashboard:
+
+```bash
+docker compose up --build
+```
+
+Then open http://localhost:3000 for the dashboard and http://localhost:8000/docs for the API.
+`scripts/smoke-test.sh` checks that everything works together. CI runs it on every pull request.
+
 ## Development
 
 To work on signalfloor itself you need [uv](https://docs.astral.sh/uv/) installed. Then:
