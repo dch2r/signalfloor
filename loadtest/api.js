@@ -1,6 +1,7 @@
 // Load test for the signalfloor API with k6 (https://k6.io).
 //
 //   k6 run -e API_URL=http://localhost:8000 loadtest/api.js
+//   k6 run -e PROFILE=stress --out csv=loadtest/results.csv loadtest/api.js
 //
 // Four kinds of traffic run at the same time, each at a fixed rate. Fixed arrival rates matter:
 // if each virtual user waited for its last response before sending the next request, a slow
@@ -11,6 +12,8 @@ import { check } from "k6";
 
 const API = __ENV.API_URL || "http://localhost:8000";
 const DURATION = __ENV.DURATION || "1m";
+// steady: a fixed, realistic mix. stress: comparisons and browsing ramp up until something gives.
+const PROFILE = __ENV.PROFILE || "steady";
 const JSON_HEADERS = { headers: { "content-type": "application/json" } };
 
 function scenario(exec, rate, vus) {
@@ -25,8 +28,20 @@ function scenario(exec, rate, vus) {
   };
 }
 
-export const options = {
-  scenarios: {
+function ramp(exec, from, to, vus) {
+  return {
+    executor: "ramping-arrival-rate",
+    exec,
+    startRate: from,
+    timeUnit: "1s",
+    stages: [{ target: to, duration: __ENV.DURATION || "3m" }],
+    preAllocatedVUs: vus,
+    maxVUs: vus * 4,
+  };
+}
+
+const PROFILES = {
+  steady: {
     // People looking at the dashboard: list runs, open one, open a diff.
     browse: scenario("browse", 20, 10),
     // Comparisons are the expensive request: a paired bootstrap on every call.
@@ -36,6 +51,15 @@ export const options = {
     // Eval runs being uploaded.
     upload: scenario("upload", 1, 2),
   },
+  stress: {
+    browse: ramp("browse", 20, 400, 100),
+    compare: ramp("compare", 5, 100, 100),
+    ingest: scenario("ingest", 50, 20),
+  },
+};
+
+export const options = {
+  scenarios: PROFILES[PROFILE],
   // Per scenario limits. These also make k6 report each scenario's numbers separately.
   thresholds: {
     http_req_failed: ["rate<0.01"],
