@@ -53,3 +53,6 @@ addopts = ["--strict-markers", "--import-mode=importlib"]
 source = ["signalfloor", "signalfloor_agent", "signalfloor_server"]
 branch = true
 omit = ["*/__main__.py"]
+# SQLAlchemy's async layer runs database calls in greenlets. Without this, every line after an
+# await on the database is reported as never run.
+concurrency = ["greenlet", "thread"]
