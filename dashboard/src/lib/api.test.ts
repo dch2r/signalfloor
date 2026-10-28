@@ -98,6 +98,12 @@ describe("compare calls", () => {
     expect(urls).toEqual(["http://api/runs/a/compare/b?seed=0"]);
   });
 
+  it("fetches one case, escaping its id", async () => {
+    const { urls, api } = recordUrls();
+    await api.getCase("r1", "a/b");
+    expect(urls).toEqual(["http://api/runs/r1/cases/a%2Fb"]);
+  });
+
   it("asks for the case diff", async () => {
     const { urls, api } = recordUrls();
     await api.diffRuns("a", "b", 5);

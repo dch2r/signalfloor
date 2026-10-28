@@ -5,8 +5,7 @@ import { CaseDiffTable } from "@/components/CaseDiffTable";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { VerdictBanner } from "@/components/VerdictBanner";
 import { createApi, type Run } from "@/lib/api";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isRunId } from "@/lib/ids";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -64,15 +63,21 @@ async function Comparison({ searchParams }: { searchParams: SearchParams }) {
       </p>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <CaseDiffTable title="Biggest drops" cases={d.worst} empty="No case got worse." />
-        <CaseDiffTable title="Biggest gains" cases={d.best} empty="No case got better." />
+        <CaseDiffTable
+          title="Biggest drops"
+          cases={d.worst}
+          empty="No case got worse."
+          runs={{ baselineId, candidateId }}
+        />
+        <CaseDiffTable
+          title="Biggest gains"
+          cases={d.best}
+          empty="No case got better."
+          runs={{ baselineId, candidateId }}
+        />
       </div>
     </div>
   );
-}
-
-function isRunId(value: string | string[] | undefined): value is string {
-  return typeof value === "string" && UUID.test(value);
 }
 
 function Failed({ message }: { message: string }) {

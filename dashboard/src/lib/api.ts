@@ -8,6 +8,8 @@ export type Run = components["schemas"]["RunOut"];
 export type Comparison = components["schemas"]["ComparisonOut"];
 export type RunDiff = components["schemas"]["RunDiffOut"];
 export type CaseDiff = components["schemas"]["CaseDiff"];
+export type Case = components["schemas"]["CaseOut"];
+export type Span = components["schemas"]["SpanOut"];
 
 export const API_URL = process.env.SIGNALFLOOR_API_URL ?? "http://127.0.0.1:8000";
 
@@ -46,6 +48,12 @@ export function createApi(baseUrl: string = API_URL, fetchImpl: typeof fetch = f
             path: { baseline_id: baselineId, candidate_id: candidateId },
             query: { seed: 0 },
           },
+        }),
+      ),
+    getCase: (runId: string, caseId: string) =>
+      call(() =>
+        client.GET("/runs/{run_id}/cases/{case_id}", {
+          params: { path: { run_id: runId, case_id: caseId } },
         }),
       ),
     diffRuns: (baselineId: string, candidateId: string, limit = 20) =>
