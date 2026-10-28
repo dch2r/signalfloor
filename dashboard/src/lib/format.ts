@@ -16,3 +16,10 @@ export function formatScore(score: number): string {
 export function formatCount(n: number): string {
   return n.toLocaleString("en-US");
 }
+
+/** A change in score with its sign, like +0.083 or -0.105. */
+export function formatDelta(delta: number): string {
+  const text = Math.abs(delta).toFixed(3);
+  if (text === "0.000") return "0.000";
+  return `${delta > 0 ? "+" : "-"}${text}`;
+}

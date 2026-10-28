@@ -75,3 +75,32 @@ describe("createApi", () => {
     );
   });
 });
+
+describe("compare calls", () => {
+  function recordUrls() {
+    const urls: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      urls.push(input instanceof Request ? input.url : String(input));
+      return new Response("{}", { headers: { "content-type": "application/json" } });
+    };
+    return { urls, api: createApi("http://api", fetchImpl) };
+  }
+
+  it("fetches one run", async () => {
+    const { urls, api } = recordUrls();
+    await api.getRun("r1");
+    expect(urls).toEqual(["http://api/runs/r1"]);
+  });
+
+  it("compares with a fixed seed so reloads show the same interval", async () => {
+    const { urls, api } = recordUrls();
+    await api.compareRuns("a", "b");
+    expect(urls).toEqual(["http://api/runs/a/compare/b?seed=0"]);
+  });
+
+  it("asks for the case diff", async () => {
+    const { urls, api } = recordUrls();
+    await api.diffRuns("a", "b", 5);
+    expect(urls).toEqual(["http://api/runs/a/diff/b?limit=5"]);
+  });
+});

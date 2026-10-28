@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCount, formatDate, formatScore } from "./format";
+import { formatCount, formatDate, formatDelta, formatScore } from "./format";
 
 describe("format", () => {
   it("shows dates in UTC", () => {
@@ -10,6 +10,16 @@ describe("format", () => {
   it("shows scores to three places", () => {
     expect(formatScore(0.15500775613275614)).toBe("0.155");
     expect(formatScore(1)).toBe("1.000");
+  });
+
+  it("signs changes", () => {
+    expect(formatDelta(0.08349213139801376)).toBe("+0.083");
+    expect(formatDelta(-0.105)).toBe("-0.105");
+  });
+
+  it("does not sign a change that rounds to zero", () => {
+    expect(formatDelta(0)).toBe("0.000");
+    expect(formatDelta(-0.0001)).toBe("0.000");
   });
 
   it("groups thousands", () => {
