@@ -3,6 +3,9 @@
 A run is one eval run: a name, some free form labels like the model or prompt version, and one
 score per case. Scores are stored per case, not as a file, so two runs can be paired by case id
 in the database.
+
+Runs never change after upload, so the case count and mean score are stored on the run itself.
+Listing runs then reads one table instead of averaging every case each time.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Double, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Double, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -22,10 +25,19 @@ class Base(DeclarativeBase):
 
 class Run(Base):
     __tablename__ = "runs"
+    __table_args__ = (
+        Index("ix_runs_created_at", "created_at"),
+        # GIN makes "labels contain these pairs" filters use the index.
+        Index("ix_runs_labels", "labels", postgresql_using="gin"),
+    )
+    # Read the server generated id and created_at back in the same INSERT.
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
     name: Mapped[str] = mapped_column(String(200))
     labels: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    n_cases: Mapped[int] = mapped_column(Integer)
+    mean_score: Mapped[float] = mapped_column(Double)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     cases: Mapped[list[CaseResult]] = relationship(
