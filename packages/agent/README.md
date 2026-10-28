@@ -99,6 +99,27 @@ second fact. That is the same pattern behind the drop in supporting recall in th
 below, seen in a single case. The trace also shows where the time goes: the model takes 99% of
 it and the search takes 36 ms.
 
+### Traced runs of both prompts
+
+`results/traced-v1-20q.jsonl` and `results/traced-v2-20q.jsonl` are both prompts on the first 20
+questions with tracing on. On 20 questions signalfloor calls it no real change: F1 0.319 against
+0.323, interval -0.131 to +0.151. Twenty cases are far too few to tell these prompts apart.
+
+The traces still explain single cases. The biggest drop, question `5abd94525542992ac4f382d2`,
+went from 1.0 with v1 to 0.222 with v2:
+
+- v1 searched once and answered "YG Entertainment".
+- v2 didn't search at all. It answered from memory with a full sentence: "The 2014 S/S is the
+  debut album of a South Korean boy group that was formed by YG Entertainment".
+
+v2 had the right answer. F1 punished the extra words. So part of this drop is the metric, not
+the agent getting the fact wrong, and only the trace shows that. Open it in the dashboard from
+the compare page.
+
+The v1 timings in these traces are inflated. A dashboard build was running on the same laptop
+during the v1 run, and one model call took 121 s. v2 ran on an idle machine at about 7 s per
+question.
+
 ## Experiment: does the v2 prompt help?
 
 Running v1 on real questions showed two problems. The agent often answered "Yes" to questions
