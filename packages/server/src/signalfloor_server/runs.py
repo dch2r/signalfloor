@@ -4,29 +4,22 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from signalfloor.compare import paired_bootstrap
+from signalfloor_server.db import Session
 from signalfloor_server.models import CaseResult, Run
-from signalfloor_server.schemas import ComparisonOut, RunIn, RunOut
+from signalfloor_server.schemas import CaseOut, ComparisonOut, RunIn, RunOut
+from signalfloor_server.traces import load_spans
 
 MAX_RESAMPLES = 100_000
 
 router = APIRouter(prefix="/runs", tags=["runs"])
-
-
-async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
-    async with request.app.state.sessions() as session:
-        yield session
-
-
-Session = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.post("", status_code=201)
@@ -42,7 +35,10 @@ async def create_run(body: RunIn, session: Session) -> RunOut:
     await session.flush()
     await session.execute(
         insert(CaseResult),
-        [{"run_id": run.id, "case_id": c.id, "score": c.score} for c in body.cases],
+        [
+            {"run_id": run.id, "case_id": c.id, "score": c.score, "trace_id": c.trace_id}
+            for c in body.cases
+        ],
     )
     await session.commit()
     return RunOut.model_validate(run)
@@ -68,6 +64,16 @@ async def list_runs(
 @router.get("/{run_id}")
 async def get_run(run_id: uuid.UUID, session: Session) -> RunOut:
     return RunOut.model_validate(await _get(session, run_id))
+
+
+@router.get("/{run_id}/cases/{case_id}")
+async def get_case(run_id: uuid.UUID, case_id: str, session: Session) -> CaseOut:
+    """One case's score, with its trace if the run recorded one and the spans have arrived."""
+    case = await session.get(CaseResult, (run_id, case_id))
+    if case is None:
+        raise HTTPException(404, f"case {case_id!r} not found in run {run_id}")
+    spans = await load_spans(session, case.trace_id) if case.trace_id else []
+    return CaseOut(case_id=case.case_id, score=case.score, trace_id=case.trace_id, spans=spans)
 
 
 @router.delete("/{run_id}", status_code=204)

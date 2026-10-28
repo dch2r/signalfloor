@@ -28,7 +28,7 @@ def empty_tables(database_url: str) -> None:
     async def go() -> None:
         engine = create_async_engine(database_url)
         async with engine.begin() as conn:
-            await conn.execute(text("truncate runs cascade"))
+            await conn.execute(text("truncate runs, spans cascade"))
         await engine.dispose()
 
     asyncio.run(go())

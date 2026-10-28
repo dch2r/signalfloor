@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -15,6 +16,7 @@ MAX_LABELS = 50
 class CaseIn(BaseModel):
     id: str = Field(min_length=1, max_length=500)
     score: float = Field(allow_inf_nan=False)
+    trace_id: str | None = Field(default=None, pattern="^[0-9a-f]{32}$")
 
 
 class RunIn(BaseModel):
@@ -60,3 +62,25 @@ class ComparisonOut(BaseModel):
     n_cases: int
     n_resamples: int
     verdict: str
+
+
+class SpanOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    trace_id: str
+    span_id: str
+    parent_span_id: str | None
+    name: str
+    service_name: str
+    start_time: datetime
+    duration_ms: float
+    status: str
+    status_message: str | None
+    attributes: dict[str, Any]
+
+
+class CaseOut(BaseModel):
+    case_id: str
+    score: float
+    trace_id: str | None
+    spans: list[SpanOut]

@@ -220,3 +220,20 @@ def test_long_strings_are_cut_short_in_errors(client: TestClient) -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["input"] == "x" * 100 + "..."
+
+
+def test_missing_case(client: TestClient) -> None:
+    run_id = upload(client)["id"]
+
+    response = client.get(f"/runs/{run_id}/cases/nope")
+
+    assert response.status_code == 404
+    assert "case 'nope' not found" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("trace_id", ["abc", "5B8EFFF798038103D269B633813FC60C", "z" * 32])
+def test_upload_rejects_bad_trace_ids(client: TestClient, trace_id: str) -> None:
+    body = run_body()
+    body["cases"][0]["trace_id"] = trace_id
+
+    assert client.post("/runs", json=body).status_code == 422
