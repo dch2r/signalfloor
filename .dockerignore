@@ -1,0 +1,11 @@
+# Keep the build context small and free of local state.
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/node_modules
+**/.next
+.git
+.coverage
+packages/agent/results
