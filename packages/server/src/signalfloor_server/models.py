@@ -14,7 +14,17 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Double, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Double,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -53,5 +63,30 @@ class CaseResult(Base):
     )
     case_id: Mapped[str] = mapped_column(Text, primary_key=True)
     score: Mapped[float] = mapped_column(Double)
+    # Links the case to the trace of the agent run that produced it, if one was recorded.
+    trace_id: Mapped[str | None] = mapped_column(String(32))
 
     run: Mapped[Run] = relationship(back_populates="cases")
+
+
+class Span(Base):
+    """One OpenTelemetry span. Ids are stored as lowercase hex, the form every tool shows."""
+
+    __tablename__ = "spans"
+    __table_args__ = (Index("ix_spans_start_time", "start_time"),)
+
+    trace_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    span_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    parent_span_id: Mapped[str | None] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(Text)
+    service_name: Mapped[str] = mapped_column(Text)
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Postgres keeps timestamps to the microsecond, so the exact duration is stored separately.
+    duration_ns: Mapped[int] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(5))
+    status_message: Mapped[str | None] = mapped_column(Text)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+    @property
+    def duration_ms(self) -> float:
+        return self.duration_ns / 1e6

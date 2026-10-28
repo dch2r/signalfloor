@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from signalfloor_server import health, runs
+from signalfloor_server import health, runs, traces
 from signalfloor_server.config import Settings
 from signalfloor_server.errors import validation_error
 
@@ -33,4 +33,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_error)
     app.include_router(health.router)
     app.include_router(runs.router)
+    app.include_router(traces.router)
     return app
