@@ -35,6 +35,7 @@ The server reads its settings from environment variables:
 | `GET /runs/{id}` | One run. |
 | `DELETE /runs/{id}` | Delete a run and its cases. |
 | `GET /runs/{baseline}/compare/{candidate}` | Paired bootstrap of candidate minus baseline. Takes `confidence`, `n_resamples` and `seed`. |
+| `GET /runs/{baseline}/diff/{candidate}` | How many cases got worse, better or stayed the same, with the biggest drops and gains. Takes `limit`. |
 | `GET /runs/{id}/cases/{case_id}` | One case's score, with its trace if it has one. |
 | `POST /v1/traces` | OpenTelemetry trace ingestion over OTLP/HTTP. |
 | `GET /traces/{trace_id}` | Every span in a trace, in start order. |
