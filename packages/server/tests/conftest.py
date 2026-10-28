@@ -1,8 +1,11 @@
+import asyncio
 import os
 from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from signalfloor_server.app import create_app
 from signalfloor_server.config import Settings
@@ -21,7 +24,18 @@ def database_url() -> str:
     return TEST_DATABASE_URL
 
 
+def empty_tables(database_url: str) -> None:
+    async def go() -> None:
+        engine = create_async_engine(database_url)
+        async with engine.begin() as conn:
+            await conn.execute(text("truncate runs cascade"))
+        await engine.dispose()
+
+    asyncio.run(go())
+
+
 @pytest.fixture
 def client(database_url: str) -> Iterator[TestClient]:
+    empty_tables(database_url)
     with TestClient(create_app(Settings(database_url=database_url))) as c:
         yield c
