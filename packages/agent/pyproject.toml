@@ -16,6 +16,9 @@ dependencies = [
     "numpy>=1.26",
 ]
 
+[project.scripts]
+signalfloor-agent = "signalfloor_agent.cli:main"
+
 [build-system]
 requires = ["hatchling>=1.32.4"]
 build-backend = "hatchling.build"
