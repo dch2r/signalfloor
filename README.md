@@ -182,6 +182,9 @@ docker compose up --build
 Then open http://localhost:3000 for the dashboard and http://localhost:8000/docs for the API.
 `scripts/smoke-test.sh` checks that everything works together. CI runs it on every pull request.
 
+To run it on Kubernetes, use the Helm chart in [deploy/helm/signalfloor](deploy/helm/signalfloor).
+CI installs it on a kind cluster on every pull request.
+
 ## Development
 
 To work on signalfloor itself you need [uv](https://docs.astral.sh/uv/) installed. Then:
