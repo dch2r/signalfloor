@@ -102,6 +102,53 @@ jobs:
         if: always()
         run: docker compose down --volumes
 
+  kubernetes:
+    name: Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - name: Lint the chart
+        run: |
+          helm lint deploy/helm/signalfloor --strict
+          # With no database configured, the chart must refuse to render.
+          if helm template deploy/helm/signalfloor --set postgresql.enabled=false > /dev/null 2>&1; then
+            echo "chart rendered without a database" >&2
+            exit 1
+          fi
+      - name: Build the images
+        run: |
+          docker build -f packages/server/Dockerfile -t signalfloor-server:ci .
+          docker build -t signalfloor-dashboard:ci dashboard
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          cluster_name: signalfloor
+      - name: Load the images into the cluster
+        run: kind load docker-image signalfloor-server:ci signalfloor-dashboard:ci --name signalfloor
+      - name: Install
+        run: |
+          helm install signalfloor deploy/helm/signalfloor \
+            --set image.server.tag=ci --set image.dashboard.tag=ci \
+            --wait --wait-for-jobs --timeout 5m
+      - name: Upgrade
+        # A second release runs a second migration job and rolls the pods.
+        run: |
+          helm upgrade signalfloor deploy/helm/signalfloor --reuse-values \
+            --set api.replicas=3 \
+            --wait --wait-for-jobs --timeout 5m
+          kubectl get jobs,deployments,pods
+      - name: Smoke test
+        run: |
+          kubectl port-forward svc/signalfloor-api 8000:8000 &
+          kubectl port-forward svc/signalfloor-dashboard 3000:3000 &
+          scripts/smoke-test.sh
+      - name: Show the cluster
+        if: failure()
+        run: |
+          kubectl get all,jobs,pvc
+          kubectl describe pods
+          kubectl logs --all-containers --prefix --tail=50 -l app.kubernetes.io/instance=signalfloor
+
   action:
     name: GitHub Action
     runs-on: ubuntu-latest
