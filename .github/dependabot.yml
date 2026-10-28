@@ -13,3 +13,14 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+
+  - package-ecosystem: npm
+    directory: /dashboard
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    groups:
+      # Next.js, React and their types move together. One PR instead of five.
+      react-and-next:
+        patterns: ["next", "eslint-config-next", "react", "react-dom", "@types/react*"]
