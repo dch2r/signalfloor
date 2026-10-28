@@ -1,0 +1,11 @@
+signalfloor is installed. To try it from your machine:
+
+  kubectl port-forward svc/{{ include "signalfloor.fullname" . }}-dashboard 3000:3000
+  kubectl port-forward svc/{{ include "signalfloor.fullname" . }}-api 8000:8000
+
+Then open http://localhost:3000. Agents send traces to http://localhost:8000/v1/traces.
+{{- if .Values.postgresql.enabled }}
+
+This uses the built in single Postgres pod, which is for trying the chart out. Set
+postgresql.enabled=false and database.url for a real database.
+{{- end }}

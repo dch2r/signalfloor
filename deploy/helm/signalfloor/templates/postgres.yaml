@@ -1,0 +1,64 @@
+{{- if .Values.postgresql.enabled }}
+# A single Postgres pod for trying the chart out. No backups and no failover: use a managed
+# database for anything that matters, and turn this off.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "signalfloor.fullname" . }}-postgres
+  labels:
+    {{- include "signalfloor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: {{ include "signalfloor.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "signalfloor.selector" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "signalfloor.selector" (dict "root" . "component" "postgres") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgresql.image }}
+          env:
+            - name: POSTGRES_USER
+              value: signalfloor
+            - name: POSTGRES_DB
+              value: signalfloor
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.postgresql.password | quote }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "signalfloor"]
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "signalfloor.fullname" . }}-postgres
+  labels:
+    {{- include "signalfloor.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "signalfloor.selector" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}
