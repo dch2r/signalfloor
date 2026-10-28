@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import operator
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Annotated, Any, TypedDict
 
@@ -30,9 +31,11 @@ from langchain_core.messages import (
 from langchain_core.tools import tool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+from opentelemetry.trace import Span, StatusCode
 
 from signalfloor_agent.data import Passage
 from signalfloor_agent.retrieval import Retriever
+from signalfloor_agent.tracing import tracer
 
 SYSTEM_PROMPT = """You answer questions using a search tool over Wikipedia passages.
 
@@ -123,17 +126,32 @@ class Agent:
         }
         # Each search round is two graph steps, plus the final answer and some slack.
         limit = 2 * self.config.max_searches + 5
-        state = self.graph.invoke(initial, config={"recursion_limit": limit})
-        messages: list[AnyMessage] = state["messages"]
-        return AgentResult(
-            answer=extract_answer(_text(messages[-1])),
-            searches=tuple(state["searches"]),
-            retrieved_titles=tuple(dict.fromkeys(state["retrieved_titles"])),
-            hit_search_limit=any(
-                isinstance(m, HumanMessage) and m.content == FINALIZE_PROMPT for m in messages
-            ),
-            messages=tuple(messages),
-        )
+        with tracer.start_as_current_span(
+            "invoke_agent signalfloor-agent",
+            attributes={
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.agent.name": "signalfloor-agent",
+            },
+        ) as span:
+            state = self.graph.invoke(initial, config={"recursion_limit": limit})
+            messages: list[AnyMessage] = state["messages"]
+            result = AgentResult(
+                answer=extract_answer(_text(messages[-1])),
+                searches=tuple(state["searches"]),
+                retrieved_titles=tuple(dict.fromkeys(state["retrieved_titles"])),
+                hit_search_limit=any(
+                    isinstance(m, HumanMessage) and m.content == FINALIZE_PROMPT for m in messages
+                ),
+                messages=tuple(messages),
+            )
+            span.set_attributes(
+                {
+                    "signalfloor.answer": result.answer,
+                    "signalfloor.searches": len(result.searches),
+                    "signalfloor.hit_search_limit": result.hit_search_limit,
+                }
+            )
+        return result
 
     def _build_graph(self) -> Any:
         graph = StateGraph(AgentState)
@@ -147,8 +165,20 @@ class Agent:
         return graph.compile()
 
     def _call_model(self, state: AgentState) -> dict[str, list[AnyMessage]]:
-        reply = self._model_with_tools.invoke(state["messages"])
-        return {"messages": [recover_text_tool_call(reply, f"text-call-{len(state['messages'])}")]}
+        with self._chat_span() as span:
+            reply = self._model_with_tools.invoke(state["messages"])
+            message = recover_text_tool_call(reply, f"text-call-{len(state['messages'])}")
+            _record_reply(span, message)
+        return {"messages": [message]}
+
+    @contextmanager
+    def _chat_span(self) -> Iterator[Span]:
+        model = getattr(self._model, "model_name", None) or type(self._model).__name__
+        with tracer.start_as_current_span(
+            f"chat {model}",
+            attributes={"gen_ai.operation.name": "chat", "gen_ai.request.model": model},
+        ) as span:
+            yield span
 
     def _route(self, state: AgentState) -> str:
         last = state["messages"][-1]
@@ -166,18 +196,36 @@ class Agent:
         queries: list[str] = []
         titles: list[str] = []
         for i, call in enumerate(last.tool_calls):
-            # Every tool call needs a reply, even ones we refuse, or the model API rejects
-            # the conversation on the next turn.
-            if call["name"] != "search":
-                content = f"Unknown tool {call['name']!r}. The only tool is search."
-            elif i >= budget:
-                content = "Search limit reached. Answer with what you have."
-            else:
-                query = str(call["args"].get("query", ""))
-                passages = self.retriever.search(query, self.config.passages_per_search)
-                queries.append(query)
-                titles.extend(p.title for p in passages)
-                content = format_passages(passages)
+            with tracer.start_as_current_span(
+                f"execute_tool {call['name']}",
+                attributes={
+                    "gen_ai.operation.name": "execute_tool",
+                    "gen_ai.tool.name": call["name"],
+                    "gen_ai.tool.call.id": call["id"] or "",
+                },
+            ) as span:
+                # Every tool call needs a reply, even ones we refuse, or the model API rejects
+                # the conversation on the next turn.
+                if call["name"] != "search":
+                    content = f"Unknown tool {call['name']!r}. The only tool is search."
+                    span.set_attribute("signalfloor.outcome", "unknown_tool")
+                    span.set_status(StatusCode.ERROR, "model called a tool that does not exist")
+                elif i >= budget:
+                    content = "Search limit reached. Answer with what you have."
+                    span.set_attribute("signalfloor.outcome", "over_budget")
+                else:
+                    query = str(call["args"].get("query", ""))
+                    passages = self.retriever.search(query, self.config.passages_per_search)
+                    queries.append(query)
+                    titles.extend(p.title for p in passages)
+                    content = format_passages(passages)
+                    span.set_attributes(
+                        {
+                            "signalfloor.outcome": "ok",
+                            "signalfloor.query": query,
+                            "signalfloor.titles": [p.title for p in passages],
+                        }
+                    )
             messages.append(ToolMessage(content=content, tool_call_id=call["id"]))
         return {"messages": messages, "searches": queries, "retrieved_titles": titles}
 
@@ -191,8 +239,30 @@ class Agent:
             for c in last.tool_calls
         ]
         prompt = HumanMessage(FINALIZE_PROMPT)
-        reply = self._model.invoke([*state["messages"], *skipped, prompt])
+        with self._chat_span() as span:
+            span.set_attribute("signalfloor.finalize", True)
+            reply = self._model.invoke([*state["messages"], *skipped, prompt])
+            _record_reply(span, reply)
         return {"messages": [*skipped, prompt, reply]}
+
+
+def _record_reply(span: Span, message: AnyMessage) -> None:
+    usage = getattr(message, "usage_metadata", None)
+    if usage:
+        span.set_attributes(
+            {
+                "gen_ai.usage.input_tokens": usage["input_tokens"],
+                "gen_ai.usage.output_tokens": usage["output_tokens"],
+            }
+        )
+    span.set_attributes(
+        {
+            "signalfloor.tool_calls": [c["name"] for c in getattr(message, "tool_calls", [])],
+            "signalfloor.recovered_from_text": bool(
+                message.response_metadata.get("recovered_from_text")
+            ),
+        }
+    )
 
 
 def recover_text_tool_call(message: AnyMessage, call_id: str) -> AnyMessage:
