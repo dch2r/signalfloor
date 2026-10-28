@@ -5,6 +5,7 @@ members = ["packages/*"]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pytest>=8.3",
@@ -28,17 +29,19 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["signalfloor", "signalfloor_agent"]
+known-first-party = ["signalfloor", "signalfloor_agent", "signalfloor_server"]
 
 [tool.mypy]
 strict = true
 python_version = "3.11"
-mypy_path = ["packages/signalfloor/src", "packages/agent/src"]
+mypy_path = ["packages/signalfloor/src", "packages/agent/src", "packages/server/src"]
 files = [
     "packages/signalfloor/src",
     "packages/signalfloor/tests",
     "packages/agent/src",
     "packages/agent/tests",
+    "packages/server/src",
+    "packages/server/tests",
 ]
 explicit_package_bases = true
 
@@ -47,6 +50,6 @@ testpaths = ["packages"]
 addopts = ["--strict-markers", "--import-mode=importlib"]
 
 [tool.coverage.run]
-source = ["signalfloor", "signalfloor_agent"]
+source = ["signalfloor", "signalfloor_agent", "signalfloor_server"]
 branch = true
 omit = ["*/__main__.py"]

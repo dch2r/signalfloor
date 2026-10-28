@@ -1,0 +1,32 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from importlib.metadata import version
+
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from signalfloor_server import health
+from signalfloor_server.config import Settings
+
+CONNECT_TIMEOUT_SECONDS = 5
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Without a timeout a readiness check against an unreachable host hangs for minutes.
+        engine = create_async_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            connect_args={"timeout": CONNECT_TIMEOUT_SECONDS},
+        )
+        app.state.engine = engine
+        app.state.sessions = async_sessionmaker(engine, expire_on_commit=False)
+        yield
+        await engine.dispose()
+
+    app = FastAPI(title="signalfloor", version=version("signalfloor-server"), lifespan=lifespan)
+    app.include_router(health.router)
+    return app
