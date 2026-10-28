@@ -25,6 +25,7 @@ from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from signalfloor_server.comparisons import RunNotFound, compare
@@ -34,6 +35,7 @@ log = logging.getLogger(__name__)
 
 LEASE = timedelta(minutes=10)
 BACKOFF_SECONDS = 2.0
+MAX_RETRY_SECONDS = 30.0
 
 
 class PermanentError(Exception):
@@ -180,8 +182,23 @@ async def work(
     poll_interval: float = 1.0,
     lease: timedelta = LEASE,
 ) -> None:
-    """Run jobs until stop is set. A job in progress is finished first."""
+    """Run jobs until stop is set. A job in progress is finished first.
+
+    If the database can't be reached, or isn't migrated yet, the worker waits and tries again
+    instead of crashing. On a fresh Kubernetes install the worker starts before the migration
+    job has created the tables, and crashing there only gets it restarted in a loop.
+    """
+    failures = 0
     while not stop.is_set():
-        if not await run_one(sessions, lease):
+        try:
+            worked = await run_one(sessions, lease)
+            failures = 0
+        except (OSError, SQLAlchemyError) as e:
+            failures += 1
+            log.warning("database not available (%s), retrying", type(e).__name__)
+            worked = False
+        if not worked:
+            # Back off while the database is down, up to half a minute between tries.
+            delay = min(poll_interval * 2**failures, MAX_RETRY_SECONDS)
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), poll_interval)
+                await asyncio.wait_for(stop.wait(), delay)

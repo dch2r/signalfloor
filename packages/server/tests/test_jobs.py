@@ -328,3 +328,32 @@ def test_prune_spans_deletes_only_old_spans_in_batches(clean_db: str) -> None:
             return deleted, left or 0
 
     assert with_sessions(clean_db, scenario) == (5, 2)
+
+
+def test_worker_waits_for_the_database_instead_of_crashing(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from sqlalchemy.exc import ProgrammingError
+
+    attempts: list[str] = []
+    stop = asyncio.Event()
+
+    async def flaky_run_one(sessions: object, lease: object) -> bool:
+        attempts.append("try")
+        if len(attempts) == 1:
+            raise OSError("connection refused")
+        if len(attempts) == 2:
+            raise ProgrammingError("select", {}, Exception('relation "jobs" does not exist'))
+        stop.set()
+        return True
+
+    monkeypatch.setattr(jobs, "run_one", flaky_run_one)
+
+    async def scenario() -> None:
+        await asyncio.wait_for(jobs.work(None, stop, poll_interval=0.001), 5)  # type: ignore[arg-type]
+
+    asyncio.run(scenario())
+
+    assert len(attempts) == 3
+    assert caplog.text.count("database not available") == 2
+    assert "OSError" in caplog.text and "ProgrammingError" in caplog.text
