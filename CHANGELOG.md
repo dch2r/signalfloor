@@ -6,6 +6,8 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
 ### Added
 
 - GitHub Action. Add `uses: dch2r/signalfloor@<version>` to a workflow to run any command as a
@@ -29,5 +31,6 @@ First release.
 - Text and JSON output for every command.
 - Exit code 1 when a check fails and 2 for bad input, so every command works as a CI check.
 
-[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dch2r/signalfloor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dch2r/signalfloor/releases/tag/v0.1.0
