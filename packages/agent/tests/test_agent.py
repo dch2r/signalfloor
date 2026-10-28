@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
@@ -21,9 +23,10 @@ CORPUS = (
 )
 
 
-def make_agent(*replies: AIMessage, **config: int) -> tuple[Agent, ScriptedChatModel]:
+def make_agent(*replies: AIMessage, max_searches: int = 4) -> tuple[Agent, ScriptedChatModel]:
     model = ScriptedChatModel(replies=list(replies))
-    agent = Agent(model, KeywordRetriever(CORPUS), AgentConfig(passages_per_search=1, **config))
+    config = AgentConfig(max_searches=max_searches, passages_per_search=1)
+    agent = Agent(model, KeywordRetriever(CORPUS), config)
     return agent, model
 
 
@@ -157,7 +160,7 @@ def test_the_search_tool_works_on_its_own() -> None:
     ("kwargs", "message"),
     [({"max_searches": 0}, "max_searches"), ({"passages_per_search": 0}, "passages_per_search")],
 )
-def test_config_validation(kwargs: dict[str, int], message: str) -> None:
+def test_config_validation(kwargs: dict[str, Any], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         AgentConfig(**kwargs)
 
