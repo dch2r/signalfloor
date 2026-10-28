@@ -20,6 +20,13 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+    ignore:
+      # The types have to match the Node version we run, which .nvmrc pins to 24.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # openapi-typescript, which generates the API types, needs TypeScript 5.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       # Next.js, React and their types move together. One PR instead of five.
       react-and-next:
