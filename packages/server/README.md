@@ -15,6 +15,7 @@ way to get it. Create a database, apply the migrations and start the server:
 createdb signalfloor
 uv run signalfloor-server migrate
 uv run signalfloor-server serve
+uv run signalfloor-server worker    # in a second terminal, for background jobs
 ```
 
 The API docs are then at http://127.0.0.1:8000/docs.
@@ -37,6 +38,8 @@ The server reads its settings from environment variables:
 | `GET /runs/{id}/cases/{case_id}` | One case's score, with its trace if it has one. |
 | `POST /v1/traces` | OpenTelemetry trace ingestion over OTLP/HTTP. |
 | `GET /traces/{trace_id}` | Every span in a trace, in start order. |
+| `POST /jobs/compare` | Queue a comparison for the worker. Allows up to 1,000,000 resamples. |
+| `GET /jobs/{id}` | A job's status, result or error. |
 
 Upload a run:
 
@@ -89,6 +92,35 @@ Some details that matter in practice:
   converted before parsing, or every id from a JSON exporter would be wrong.
 - Postgres can't store the NUL character, and one in any attribute made it reject the whole
   batch. NUL characters are removed, and NaN and infinity are stored as strings.
+
+## Background jobs
+
+Some work is too slow for a request. `POST /jobs/compare` queues it and answers 202 with a job
+id. `signalfloor-server worker` runs queued jobs, and `GET /jobs/{id}` shows the status:
+queued, running, succeeded or failed.
+
+The queue is a table in Postgres, not Redis. A worker claims a job with
+`SELECT ... FOR UPDATE SKIP LOCKED`, so you can run as many workers as you like:
+
+- Two workers never run the same job. A test runs four workers on 20 jobs and checks each
+  job ran once. Without the row lock, one job ran three times.
+- A claimed job has a 10 minute lease. If its worker dies, another worker takes the job when
+  the lease runs out.
+- A worker that lost its lease can't overwrite the result of the worker that took over.
+- A job that raises is retried after 2, then 4 seconds, up to 3 attempts. A job that can't
+  succeed, such as comparing a run that was deleted, fails at once.
+- On SIGTERM the worker finishes its current job and exits, which is what Kubernetes expects.
+
+## Deleting old spans
+
+Spans pile up. Delete the ones older than 30 days with:
+
+```bash
+uv run signalfloor-server prune-spans --older-than-days 30
+```
+
+It deletes 10,000 spans per transaction so a big cleanup doesn't lock the table for long. Run
+it on a schedule, for example as a Kubernetes CronJob.
 
 ## Health checks
 
