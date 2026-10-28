@@ -28,14 +28,20 @@ def empty_tables(database_url: str) -> None:
     async def go() -> None:
         engine = create_async_engine(database_url)
         async with engine.begin() as conn:
-            await conn.execute(text("truncate runs, spans cascade"))
+            await conn.execute(text("truncate runs, spans, jobs cascade"))
         await engine.dispose()
 
     asyncio.run(go())
 
 
 @pytest.fixture
-def client(database_url: str) -> Iterator[TestClient]:
+def clean_db(database_url: str) -> str:
     empty_tables(database_url)
+    return database_url
+
+
+@pytest.fixture
+def client(clean_db: str) -> Iterator[TestClient]:
+    database_url = clean_db
     with TestClient(create_app(Settings(database_url=database_url))) as c:
         yield c

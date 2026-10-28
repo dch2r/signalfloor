@@ -1,7 +1,7 @@
 import pytest
 import uvicorn
 
-from signalfloor_server import cli, migrate
+from signalfloor_server import cli, jobs, migrate, retention
 
 
 def test_migrate(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -27,3 +27,25 @@ def test_a_command_is_required() -> None:
         cli.main([])
 
     assert exit_info.value.code == 2
+
+
+def test_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[float] = []
+
+    async def fake_work(sessions: object, stop: object, *, poll_interval: float) -> None:
+        seen.append(poll_interval)
+
+    monkeypatch.setattr(jobs, "work", fake_work)
+
+    assert cli.main(["worker", "--poll-interval", "0.5"]) == 0
+    assert seen == [0.5]
+
+
+def test_prune_spans(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    async def fake_prune(session: object, older_than: object) -> int:
+        return 3
+
+    monkeypatch.setattr(retention, "prune_spans", fake_prune)
+
+    assert cli.main(["prune-spans"]) == 0
+    assert "deleted 3 spans older than 30 days" in capsys.readouterr().out

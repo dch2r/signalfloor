@@ -84,3 +84,29 @@ class CaseOut(BaseModel):
     score: float
     trace_id: str | None
     spans: list[SpanOut]
+
+
+# A background comparison can afford far more resamples than a request can.
+MAX_JOB_RESAMPLES = 1_000_000
+
+
+class CompareJobIn(BaseModel):
+    baseline_id: uuid.UUID
+    candidate_id: uuid.UUID
+    confidence: float = Field(default=0.95, gt=0, lt=1)
+    n_resamples: int = Field(default=100_000, ge=100, le=MAX_JOB_RESAMPLES)
+    seed: int | None = Field(default=None, ge=0)
+
+
+class JobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: str
+    status: str
+    attempts: int
+    result: dict[str, Any] | None
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None

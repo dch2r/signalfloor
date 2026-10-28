@@ -24,6 +24,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -90,3 +91,36 @@ class Span(Base):
     @property
     def duration_ms(self) -> float:
         return self.duration_ns / 1e6
+
+
+class Job(Base):
+    """A unit of background work, queued in Postgres and run by `signalfloor-server worker`.
+
+    status is queued, running, succeeded or failed. run_after is when the job can next be
+    claimed: for a queued job, when it is due, and for a running job, when its worker's lease
+    runs out. One column covers both, so a job whose worker died is picked up by the same query
+    that picks up new jobs.
+    """
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        Index(
+            "ix_jobs_claimable",
+            "run_after",
+            postgresql_where=text("status in ('queued', 'running')"),
+        ),
+    )
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    kind: Mapped[str] = mapped_column(String(50))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(10), server_default="queued")
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, server_default="3")
+    run_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
