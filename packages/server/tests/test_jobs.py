@@ -97,6 +97,22 @@ def test_compare_job_end_to_end(client: TestClient, clean_db: str) -> None:
     assert done["started_at"] and done["finished_at"]
 
 
+def test_compare_job_with_shared_cases_only(client: TestClient, clean_db: str) -> None:
+    baseline = upload(client, [1.0, 0.0])
+    candidate = upload(client, [1.0, 1.0, 0.0])
+    body = {"baseline_id": baseline, "candidate_id": candidate, "n_resamples": 200}
+    strict = client.post("/jobs/compare", json=body).json()["id"]
+    shared = client.post("/jobs/compare", json={**body, "shared_only": True}).json()["id"]
+
+    while with_sessions(clean_db, jobs.run_one):
+        pass
+
+    assert client.get(f"/jobs/{strict}").json()["status"] == "failed"
+    done = client.get(f"/jobs/{shared}").json()
+    assert done["status"] == "succeeded"
+    assert done["result"]["n_cases"] == 2
+
+
 def test_compare_job_for_a_missing_run(client: TestClient) -> None:
     run_id = upload(client, [1.0, 0.0])
 

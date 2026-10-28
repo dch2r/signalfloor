@@ -52,6 +52,8 @@ async def _compare(session: AsyncSession, payload: dict[str, Any]) -> dict[str, 
             confidence=payload["confidence"],
             n_resamples=payload["n_resamples"],
             seed=payload["seed"],
+            # Jobs queued before this option existed don't have it.
+            shared_only=payload.get("shared_only", False),
         )
     except (RunNotFound, ValueError) as e:
         raise PermanentError(str(e)) from e

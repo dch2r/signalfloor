@@ -279,6 +279,11 @@ export interface components {
             n_resamples: number;
             /** Seed */
             seed?: number | null;
+            /**
+             * Shared Only
+             * @default false
+             */
+            shared_only: boolean;
         };
         /** ComparisonOut */
         ComparisonOut: {
@@ -667,6 +672,8 @@ export interface operations {
                 confidence?: number;
                 n_resamples?: number;
                 seed?: number | null;
+                /** @description Compare only the cases both runs have, instead of refusing. */
+                shared_only?: boolean;
             };
             header?: never;
             path: {

@@ -27,13 +27,22 @@ async def compare(
     confidence: float,
     n_resamples: int,
     seed: int | None,
+    shared_only: bool = False,
 ) -> ComparisonOut:
     """Paired bootstrap of candidate minus baseline.
+
+    By default both runs must have exactly the same cases, like `signalfloor compare`. With
+    shared_only, cases in only one run are left out and the rest are compared. The caller is
+    then responsible for telling the user how many were left out.
 
     Raises RunNotFound if a run doesn't exist and ValueError if the runs can't be paired.
     """
     baseline = await scores(session, baseline_id)
     candidate = await scores(session, candidate_id)
+    if shared_only:
+        shared = baseline.keys() & candidate.keys()
+        baseline = {k: v for k, v in baseline.items() if k in shared}
+        candidate = {k: v for k, v in candidate.items() if k in shared}
     # The bootstrap is CPU bound. Run it in a thread so the event loop stays free.
     result = await run_in_threadpool(
         paired_bootstrap,

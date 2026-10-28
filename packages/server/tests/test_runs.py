@@ -308,3 +308,34 @@ def test_diff_with_a_missing_run(client: TestClient) -> None:
     response = client.get(f"/runs/{run_id}/diff/{uuid.uuid4()}")
 
     assert response.status_code == 404
+
+
+def test_compare_only_the_shared_cases(client: TestClient) -> None:
+    # A 3 question run against a 5 question run that contains the same 3 questions.
+    baseline = upload(client, "small", [1.0, 0.0, 1.0])["id"]
+    candidate = upload(client, "big", [1.0, 1.0, 1.0, 0.0, 0.0])["id"]
+    url = f"/runs/{baseline}/compare/{candidate}"
+
+    strict = client.get(url)
+    shared = client.get(url, params={"shared_only": True, "seed": 0})
+
+    assert strict.status_code == 422
+    assert shared.status_code == 200
+    result = shared.json()
+    assert result["n_cases"] == 3
+    assert result["baseline_mean"] == pytest.approx(2 / 3)
+    assert result["candidate_mean"] == 1.0
+
+
+def test_shared_only_still_needs_enough_shared_cases(client: TestClient) -> None:
+    baseline = client.post(
+        "/runs", json={"name": "a", "cases": [{"id": "x", "score": 1}, {"id": "y", "score": 0}]}
+    ).json()["id"]
+    candidate = client.post(
+        "/runs", json={"name": "b", "cases": [{"id": "x", "score": 1}, {"id": "z", "score": 0}]}
+    ).json()["id"]
+
+    response = client.get(f"/runs/{baseline}/compare/{candidate}", params={"shared_only": True})
+
+    assert response.status_code == 422
+    assert "need at least 2 cases" in response.json()["detail"]
