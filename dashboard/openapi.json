@@ -375,6 +375,18 @@
               ],
               "title": "Seed"
             }
+          },
+          {
+            "name": "shared_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Compare only the cases both runs have, instead of refusing.",
+              "default": false,
+              "title": "Shared Only"
+            },
+            "description": "Compare only the cases both runs have, instead of refusing."
           }
         ],
         "responses": {
@@ -781,6 +793,11 @@
               }
             ],
             "title": "Seed"
+          },
+          "shared_only": {
+            "type": "boolean",
+            "title": "Shared Only",
+            "default": false
           }
         },
         "type": "object",

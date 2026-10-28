@@ -118,6 +118,7 @@ class CompareJobIn(BaseModel):
     confidence: float = Field(default=0.95, gt=0, lt=1)
     n_resamples: int = Field(default=100_000, ge=100, le=MAX_JOB_RESAMPLES)
     seed: int | None = Field(default=None, ge=0)
+    shared_only: bool = False
 
 
 class JobOut(BaseModel):
