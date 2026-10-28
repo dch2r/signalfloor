@@ -24,6 +24,17 @@ def test_serve(monkeypatch: pytest.MonkeyPatch) -> None:
     assert seen == {"host": "127.0.0.1", "port": 9000}
 
 
+def test_serve_with_several_processes(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[object] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: seen.extend([app, kwargs]))
+
+    assert cli.main(["serve", "--workers", "4"]) == 0
+    assert seen == [
+        "signalfloor_server.app:create_app",
+        {"factory": True, "workers": 4, "host": "127.0.0.1", "port": 8000},
+    ]
+
+
 def test_a_command_is_required() -> None:
     with pytest.raises(SystemExit) as exit_info:
         cli.main([])
@@ -59,3 +70,18 @@ def test_openapi(capsys: pytest.CaptureFixture[str]) -> None:
     schema = json.loads(capsys.readouterr().out)
     assert schema["info"]["title"] == "signalfloor"
     assert "/runs/{baseline_id}/compare/{candidate_id}" in schema["paths"]
+
+
+def test_importing_main_does_not_start_anything() -> None:
+    # Server worker processes re-import the module that launched them. If importing it ran the
+    # CLI, every worker would start a whole new server.
+    import importlib
+
+    importlib.import_module("signalfloor_server.__main__")
+
+
+def test_the_command_points_at_the_cli() -> None:
+    from importlib.metadata import entry_points
+
+    (command,) = entry_points(group="console_scripts", name="signalfloor-server")
+    assert command.value == "signalfloor_server.cli:main"
