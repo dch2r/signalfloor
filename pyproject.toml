@@ -28,13 +28,18 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["signalfloor"]
+known-first-party = ["signalfloor", "signalfloor_agent"]
 
 [tool.mypy]
 strict = true
 python_version = "3.11"
-mypy_path = "packages/signalfloor/src"
-files = ["packages/signalfloor/src", "packages/signalfloor/tests"]
+mypy_path = ["packages/signalfloor/src", "packages/agent/src"]
+files = [
+    "packages/signalfloor/src",
+    "packages/signalfloor/tests",
+    "packages/agent/src",
+    "packages/agent/tests",
+]
 explicit_package_bases = true
 
 [tool.pytest.ini_options]
@@ -42,6 +47,6 @@ testpaths = ["packages"]
 addopts = ["--strict-markers", "--import-mode=importlib"]
 
 [tool.coverage.run]
-source = ["signalfloor"]
+source = ["signalfloor", "signalfloor_agent"]
 branch = true
 omit = ["*/__main__.py"]
