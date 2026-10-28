@@ -14,6 +14,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from signalfloor_agent import tracing
 from signalfloor_agent.agent import PROMPTS, Agent, AgentConfig, openai_compatible_chat_model
 from signalfloor_agent.data import Dataset, default_cache_dir, load_hotpot
 from signalfloor_agent.embeddings import NOMIC_PREFIXES, OpenAICompatibleEmbedder
@@ -47,6 +48,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     ev.add_argument("--model", default="qwen3:1.7b")
     ev.add_argument("--embedding-model", default="nomic-embed-text")
     ev.add_argument("--base-url", default="http://localhost:11434/v1")
+    ev.add_argument(
+        "--otlp-endpoint",
+        help="send OpenTelemetry traces here, e.g. http://localhost:8000/v1/traces",
+    )
     ev.add_argument("--quiet", action="store_true", help="do not print each question")
     ev.set_defaults(handler=_run_eval)
 
@@ -66,7 +71,13 @@ def _run_eval(args: argparse.Namespace) -> int:
     questions = dataset.questions[: args.questions]
     agent = build_agent(args, dataset)
 
-    results = run_eval(agent, questions, args.out, progress=None if args.quiet else print)
+    provider = tracing.configure(args.otlp_endpoint) if args.otlp_endpoint else None
+    try:
+        results = run_eval(agent, questions, args.out, progress=None if args.quiet else print)
+    finally:
+        if provider:
+            # Spans are sent in batches. Shutting down sends the last batch.
+            provider.shutdown()
     s = summarize(results)
     print(
         f"\ncases {s.cases}  f1 {s.mean_f1:.3f}  exact match {s.mean_exact_match:.3f}  "

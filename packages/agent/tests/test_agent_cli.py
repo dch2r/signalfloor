@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from langchain_core.messages import AIMessage
 
-from signalfloor_agent import cli
+from signalfloor_agent import cli, tracing
 from signalfloor_agent.agent import SYSTEM_PROMPT_V2, Agent, AgentConfig
 from signalfloor_agent.data import Dataset, Passage, Question, build_corpus
 from signalfloor_agent.retrieval import DenseRetriever, HybridRetriever, KeywordRetriever
@@ -135,3 +135,36 @@ def test_prefixes_only_for_nomic_models(monkeypatch: pytest.MonkeyPatch, tmp_pat
     cli.build_retriever(args(embedding_model="all-minilm"), DATASET)
 
     assert made[0]["document_prefix"] == ""
+
+
+def test_traces_are_flushed_at_the_end(
+    tmp_path: Path, offline: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+
+    class FakeProvider:
+        def shutdown(self) -> None:
+            calls.append("shutdown")
+
+    def fake_configure(endpoint: str) -> FakeProvider:
+        calls.append(endpoint)
+        return FakeProvider()
+
+    monkeypatch.setattr(tracing, "configure", fake_configure)
+
+    cli.main(
+        [
+            "eval",
+            "--out",
+            str(tmp_path / "r.jsonl"),
+            "--questions",
+            "1",
+            "--corpus-questions",
+            "3",
+            "--quiet",
+            "--otlp-endpoint",
+            "http://server/v1/traces",
+        ]
+    )
+
+    assert calls == ["http://server/v1/traces", "shutdown"]

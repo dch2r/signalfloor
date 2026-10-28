@@ -64,6 +64,7 @@ def test_writes_one_scored_line_per_question(tmp_path: Path) -> None:
         "supporting_recall",
         "hit_search_limit",
         "seconds",
+        "trace_id",
     }
     assert "American" not in json.dumps(rows[0]["id"]), "no gold text beyond our own answer"
     assert lines[0].startswith("[1/2] f1 1.00 searches 2")

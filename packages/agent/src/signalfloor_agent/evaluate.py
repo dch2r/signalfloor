@@ -22,6 +22,7 @@ from pathlib import Path
 from signalfloor_agent.agent import Agent
 from signalfloor_agent.data import Question
 from signalfloor_agent.scoring import exact_match, f1
+from signalfloor_agent.tracing import current_trace_id, tracer
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,8 @@ class CaseResult:
     supporting_recall: float
     hit_search_limit: bool
     seconds: float
+    # Set when tracing is on. Files written before tracing existed don't have it.
+    trace_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -48,20 +51,31 @@ class Summary:
 
 
 def evaluate_case(agent: Agent, question: Question) -> CaseResult:
-    start = time.perf_counter()
-    result = agent.answer(question.question)
-    seconds = time.perf_counter() - start
-    supporting = set(question.supporting_titles)
-    return CaseResult(
-        id=question.id,
-        score=f1(result.answer, question.answer),
-        exact_match=exact_match(result.answer, question.answer),
-        answer=result.answer,
-        searches=len(result.searches),
-        supporting_recall=len(supporting & set(result.retrieved_titles)) / len(supporting),
-        hit_search_limit=result.hit_search_limit,
-        seconds=round(seconds, 2),
-    )
+    with tracer.start_as_current_span(
+        "eval case", attributes={"signalfloor.case_id": question.id}
+    ) as span:
+        start = time.perf_counter()
+        result = agent.answer(question.question)
+        seconds = time.perf_counter() - start
+        supporting = set(question.supporting_titles)
+        case = CaseResult(
+            id=question.id,
+            score=f1(result.answer, question.answer),
+            exact_match=exact_match(result.answer, question.answer),
+            answer=result.answer,
+            searches=len(result.searches),
+            supporting_recall=len(supporting & set(result.retrieved_titles)) / len(supporting),
+            hit_search_limit=result.hit_search_limit,
+            seconds=round(seconds, 2),
+            trace_id=current_trace_id(),
+        )
+        span.set_attributes(
+            {
+                "signalfloor.score": case.score,
+                "signalfloor.supporting_recall": case.supporting_recall,
+            }
+        )
+    return case
 
 
 def run_eval(
