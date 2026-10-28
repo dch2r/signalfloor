@@ -92,10 +92,10 @@ describe("compare calls", () => {
     expect(urls).toEqual(["http://api/runs/r1"]);
   });
 
-  it("compares with a fixed seed so reloads show the same interval", async () => {
+  it("compares the shared cases with a fixed seed so reloads show the same interval", async () => {
     const { urls, api } = recordUrls();
     await api.compareRuns("a", "b");
-    expect(urls).toEqual(["http://api/runs/a/compare/b?seed=0"]);
+    expect(urls).toEqual(["http://api/runs/a/compare/b?seed=0&shared_only=true"]);
   });
 
   it("fetches one case, escaping its id", async () => {

@@ -41,12 +41,14 @@ export function createApi(baseUrl: string = API_URL, fetchImpl: typeof fetch = f
     getRun: (runId: string) =>
       call(() => client.GET("/runs/{run_id}", { params: { path: { run_id: runId } } })),
     // A fixed seed so the interval doesn't shift a little every time the page is reloaded.
+    // Runs with different questions are compared on the questions they share. The compare page
+    // says how many were left out, using the counts from diffRuns.
     compareRuns: (baselineId: string, candidateId: string) =>
       call(() =>
         client.GET("/runs/{baseline_id}/compare/{candidate_id}", {
           params: {
             path: { baseline_id: baselineId, candidate_id: candidateId },
-            query: { seed: 0 },
+            query: { seed: 0, shared_only: true },
           },
         }),
       ),

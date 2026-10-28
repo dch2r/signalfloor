@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { CaseDiffTable } from "@/components/CaseDiffTable";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { LeftOutNotice } from "@/components/LeftOutNotice";
 import { VerdictBanner } from "@/components/VerdictBanner";
 import { createApi, type Run } from "@/lib/api";
 import { isRunId } from "@/lib/ids";
@@ -52,14 +53,14 @@ async function Comparison({ searchParams }: { searchParams: SearchParams }) {
         <RunCard role="Candidate" run={candidate.data} />
       </div>
 
+      <LeftOutNotice diff={d} />
+
       <VerdictBanner comparison={comparison.data} />
 
       <p className="text-sm">
         Of {d.n_shared} shared cases, <strong className="text-bad">{d.n_worse} got worse</strong>,{" "}
         <strong className="text-good">{d.n_better} got better</strong> and {d.n_same} stayed the
         same.
-        {d.only_in_baseline + d.only_in_candidate > 0 &&
-          ` ${d.only_in_baseline} cases are only in the baseline and ${d.only_in_candidate} only in the candidate. They are left out.`}
       </p>
 
       <div className="grid gap-8 lg:grid-cols-2">
