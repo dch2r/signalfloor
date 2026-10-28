@@ -44,8 +44,8 @@ Python 3.11 or newer is needed.
 
 ## Status
 
-Alpha. The `compare`, `calibrate` and `flaky` commands work today. Trace ingestion and a
-ready made GitHub Action are next. See the [changelog](CHANGELOG.md) for what changed in
+Alpha. The `compare`, `calibrate` and `flaky` commands and the GitHub Action work today.
+Trace ingestion is next. See the [changelog](CHANGELOG.md) for what changed in
 each release.
 
 ## Compare two eval runs
@@ -131,6 +131,24 @@ The noise band is the most useful number here. On this suite, any change smaller
 A case is flaky when its score moves between runs. By default any movement counts, which
 suits pass/fail scores. For continuous scores set `--tolerance`, for example 0.1. The command
 exits with code 1 when more than 5% of cases are flaky. Change that with `--max-flaky-rate`.
+
+## Use it in GitHub Actions
+
+Add a step after the job that produces your eval results:
+
+```yaml
+- uses: dch2r/signalfloor@v0.2.0
+  with:
+    command: compare
+    files: evals/baseline.jsonl evals/candidate.jsonl
+```
+
+The step fails only when the candidate is a real regression, and the result is written to
+the job summary. `command` can be `compare`, `calibrate` or `flaky`. Pass any other command
+line options through `options`, for example `options: --confidence 0.99`. The step also sets
+an `exit-code` output.
+
+Want to try everything first? The [examples](examples) folder has small result files.
 
 ## Development
 

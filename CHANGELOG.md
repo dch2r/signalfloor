@@ -6,6 +6,12 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- GitHub Action. Add `uses: dch2r/signalfloor@<version>` to a workflow to run any command as a
+  CI check. The result goes to the job summary and the step fails when the check fails.
+- Example result files in `examples/` for trying the commands.
+
 ## [0.1.0] - 2026-10-27
 
 First release.
