@@ -34,6 +34,9 @@ The server reads its settings from environment variables:
 | `GET /runs/{id}` | One run. |
 | `DELETE /runs/{id}` | Delete a run and its cases. |
 | `GET /runs/{baseline}/compare/{candidate}` | Paired bootstrap of candidate minus baseline. Takes `confidence`, `n_resamples` and `seed`. |
+| `GET /runs/{id}/cases/{case_id}` | One case's score, with its trace if it has one. |
+| `POST /v1/traces` | OpenTelemetry trace ingestion over OTLP/HTTP. |
+| `GET /traces/{trace_id}` | Every span in a trace, in start order. |
 
 Upload a run:
 
@@ -60,6 +63,32 @@ That is the real result for the two prompt versions of the [reference agent](../
 Some limits keep one request from tying up the server. A run can have up to 100,000 cases and a
 comparison up to 100,000 resamples. Case ids must be unique within a run, and scores must be
 finite numbers. Two runs can only be compared if they have exactly the same case ids.
+
+## Traces
+
+`POST /v1/traces` is a standard OTLP/HTTP endpoint, so any OpenTelemetry SDK can send to it by
+setting its exporter endpoint to `http://<server>/v1/traces`. It takes protobuf or JSON,
+gzipped or not, up to 10 MB once unzipped.
+
+To link a case to its trace, upload the case with a `trace_id`:
+
+```json
+{"id": "q1", "score": 0.0, "trace_id": "1e25e12afbd6768c9b2686196163c206"}
+```
+
+`GET /runs/{id}/cases/q1` then returns the score and the spans together. Spans can arrive before
+or after the run is uploaded.
+
+Some details that matter in practice:
+
+- Exporters retry failed requests, so the same span can arrive twice. Spans are keyed by trace
+  and span id and duplicates are dropped.
+- A span with a malformed id is rejected on its own and reported back as a partial success.
+  The rest of the batch is kept.
+- In OTLP JSON, ids are hex, but protobuf's JSON parser reads them as base64. They are
+  converted before parsing, or every id from a JSON exporter would be wrong.
+- Postgres can't store the NUL character, and one in any attribute made it reject the whole
+  batch. NUL characters are removed, and NaN and infinity are stored as strings.
 
 ## Health checks
 
