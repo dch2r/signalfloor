@@ -57,6 +57,48 @@ signalfloor compare results/v1.jsonl results/v2.jsonl
 If a run is stopped, run the same command again and it picks up where it left off. The first
 run builds the embedding index, which takes about 10 minutes on a laptop CPU.
 
+## Tracing
+
+Pass `--otlp-endpoint` to record an OpenTelemetry trace for every question:
+
+```bash
+uv run signalfloor-server serve
+uv run signalfloor-agent eval --questions 5 --prompt v2 --out runs/traced.jsonl \
+    --otlp-endpoint http://localhost:8000/v1/traces
+```
+
+Each line of the results file then has a `trace_id`. Any OTLP/HTTP backend works, such as
+Jaeger, but sending to signalfloor-server lets you open a case and its trace together.
+
+Spans follow the OpenTelemetry GenAI conventions:
+
+```
+eval case                      case id, F1, supporting recall
+  invoke_agent                 final answer, number of searches
+    chat qwen3:1.7b            tool calls asked for, input and output tokens
+    execute_tool search        query, titles found
+    chat qwen3:1.7b
+```
+
+Prompts and passage text are not recorded. Only the model, token counts, search queries,
+titles and the final answer are.
+
+Here is one real trace from the v2 prompt, for a question the agent got wrong:
+
+```
+eval case                      8981 ms  score 0.0, supporting recall 0.5
+  invoke_agent                 8981 ms  answer "Shirley Temple", 1 search
+    chat qwen3:1.7b            3424 ms  asks for search, 286 tokens in
+    execute_tool search          36 ms  "woman who portrayed Corliss Archer"
+    chat qwen3:1.7b            5517 ms  answers, 743 tokens in
+```
+
+The question asks what government position the actress who played Corliss Archer held. The
+agent found the actress and stopped there, answering with her name. It never searched for the
+second fact. That is the same pattern behind the drop in supporting recall in the experiment
+below, seen in a single case. The trace also shows where the time goes: the model takes 99% of
+it and the search takes 36 ms.
+
 ## Experiment: does the v2 prompt help?
 
 Running v1 on real questions showed two problems. The agent often answered "Yes" to questions
