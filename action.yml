@@ -1,0 +1,72 @@
+name: signalfloor
+description: Fail a job only when an LLM eval regression is real, not just noise.
+author: Diwesh Chaurasia
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  command:
+    description: Which check to run. One of compare, calibrate or flaky.
+    required: true
+  files:
+    description: >
+      Result files to pass to the command, separated by spaces or new lines. For compare give
+      the baseline then the candidate. For calibrate give the judge labels then the human
+      labels. For flaky give two or more runs. Paths must not contain spaces.
+    required: true
+  options:
+    description: Extra command line options, for example "--confidence 0.99 --seed 0".
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: 0 if the check passed, 1 if it failed, 2 for bad input.
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+    - id: run
+      shell: bash
+      env:
+        SF_COMMAND: ${{ inputs.command }}
+        SF_FILES: ${{ inputs.files }}
+        SF_OPTIONS: ${{ inputs.options }}
+      run: |
+        case "$SF_COMMAND" in
+          compare|calibrate|flaky) ;;
+          *) echo "::error::command must be compare, calibrate or flaky, got '$SF_COMMAND'"; exit 2 ;;
+        esac
+
+        # Split on whitespace without glob expansion. Inputs are never evaluated as code.
+        set -f
+        read -r -d '' -a files <<< "$SF_FILES" || true
+        read -r -d '' -a options <<< "$SF_OPTIONS" || true
+        set +f
+
+        # Run the signalfloor code from the same commit as this action, so
+        # dch2r/signalfloor@v0.2.0 always runs signalfloor 0.2.0.
+        set +e
+        output=$(uv tool run --quiet --from "$GITHUB_ACTION_PATH/packages/signalfloor" \
+          signalfloor "$SF_COMMAND" "${files[@]}" "${options[@]}" 2>&1)
+        code=$?
+        set -e
+
+        echo "$output"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        {
+          echo "### signalfloor $SF_COMMAND"
+          echo
+          echo '```text'
+          echo "$output"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$code" -eq 1 ]; then
+          echo "::error title=signalfloor $SF_COMMAND::check failed, see the job summary"
+        fi
+        exit "$code"
