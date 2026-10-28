@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from signalfloor_server import health, job_routes, runs, traces
 from signalfloor_server.config import Settings
 from signalfloor_server.errors import validation_error
+from signalfloor_server.migrate import head_revision
 
 CONNECT_TIMEOUT_SECONDS = 5
 
@@ -34,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await engine.dispose()
 
     app = FastAPI(title="signalfloor", version=version("signalfloor-server"), lifespan=lifespan)
+    app.state.schema_revision = head_revision()
     app.add_exception_handler(RequestValidationError, validation_error)
     app.include_router(health.router)
     app.include_router(runs.router)
