@@ -1,0 +1,31 @@
+# A plain Job, not a Helm hook. Hooks run after Helm waits for the pods to be ready, but the API
+# isn't ready until the schema is migrated, so a hook would deadlock an install with --wait.
+# Each release gets its own Job, because a Job's pod template can't be changed once created.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "signalfloor.fullname" . }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "signalfloor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+spec:
+  # Postgres may still be starting. A failed attempt is retried with backoff.
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "signalfloor.selector" (dict "root" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        {{- include "signalfloor.podSecurity" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "signalfloor.serverImage" . }}
+          imagePullPolicy: {{ .Values.image.server.pullPolicy }}
+          args: ["migrate"]
+          env:
+            {{- include "signalfloor.serverEnv" . | nindent 12 }}
+          securityContext:
+            {{- include "signalfloor.containerSecurity" . | nindent 12 }}

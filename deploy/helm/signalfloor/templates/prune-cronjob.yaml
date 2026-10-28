@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "signalfloor.fullname" . }}-prune-spans
+  labels:
+    {{- include "signalfloor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prune-spans
+spec:
+  schedule: {{ .Values.prune.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "signalfloor.selector" (dict "root" . "component" "prune-spans") | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          securityContext:
+            {{- include "signalfloor.podSecurity" . | nindent 12 }}
+          containers:
+            - name: prune-spans
+              image: {{ include "signalfloor.serverImage" . }}
+              imagePullPolicy: {{ .Values.image.server.pullPolicy }}
+              args: ["prune-spans", "--older-than-days", {{ .Values.prune.olderThanDays | quote }}]
+              env:
+                {{- include "signalfloor.serverEnv" . | nindent 16 }}
+              securityContext:
+                {{- include "signalfloor.containerSecurity" . | nindent 16 }}

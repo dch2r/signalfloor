@@ -1,0 +1,46 @@
+image:
+  server:
+    repository: signalfloor-server
+    tag: local
+    pullPolicy: IfNotPresent
+  dashboard:
+    repository: signalfloor-dashboard
+    tag: local
+    pullPolicy: IfNotPresent
+
+database:
+  # Where the API and worker find Postgres. Give one of these, or turn on postgresql below.
+  # url: a full SQLAlchemy URL, such as postgresql+asyncpg://user:password@host:5432/signalfloor
+  # existingSecret: a Secret you manage, with the URL under the key SIGNALFLOOR_DATABASE_URL
+  url: ""
+  existingSecret: ""
+
+postgresql:
+  # A single Postgres pod, for trying the chart out. Use a managed database in production.
+  enabled: true
+  image: postgres:18@sha256:979bccfde35445db618c65107d27d08c6c21339d8dc3ad4c830c6633947be0e4
+  password: signalfloor
+  storage: 1Gi
+
+api:
+  replicas: 2
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+worker:
+  replicas: 1
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+dashboard:
+  replicas: 1
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 384Mi}
+
+prune:
+  # Delete trace spans older than this many days, once a day.
+  schedule: "0 3 * * *"
+  olderThanDays: 30

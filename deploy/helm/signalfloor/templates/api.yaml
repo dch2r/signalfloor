@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "signalfloor.fullname" . }}-api
+  labels:
+    {{- include "signalfloor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      {{- include "signalfloor.selector" (dict "root" . "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "signalfloor.selector" (dict "root" . "component" "api") | nindent 8 }}
+      annotations:
+        # Restart the pods when the database URL changes.
+        checksum/database: {{ include "signalfloor.databaseUrl" . | sha256sum }}
+    spec:
+      securityContext:
+        {{- include "signalfloor.podSecurity" . | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "signalfloor.serverImage" . }}
+          imagePullPolicy: {{ .Values.image.server.pullPolicy }}
+          args: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            {{- include "signalfloor.serverEnv" . | nindent 12 }}
+          livenessProbe:
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 10
+          # Ready only when the database answers and the schema is migrated.
+          readinessProbe:
+            httpGet: {path: /health/ready, port: http}
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "signalfloor.containerSecurity" . | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "signalfloor.fullname" . }}-api
+  labels:
+    {{- include "signalfloor.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "signalfloor.selector" (dict "root" . "component" "api") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+{{- if gt (int .Values.api.replicas) 1 }}
+---
+# Keep at least one API pod up while nodes are drained for maintenance.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "signalfloor.fullname" . }}-api
+  labels:
+    {{- include "signalfloor.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "signalfloor.selector" (dict "root" . "component" "api") | nindent 6 }}
+{{- end }}
