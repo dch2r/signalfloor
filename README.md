@@ -171,9 +171,11 @@ git clone https://github.com/dch2r/signalfloor.git
 cd signalfloor
 uv sync
 uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
+createdb signalfloor_test
 uv run pytest
 ```
 
+The server tests need a local Postgres. See [packages/server](packages/server/README.md).
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to send a change.
 
 ## License
