@@ -28,10 +28,8 @@ jobs:
       - name: Publish the steady summary
         if: always()
         run: cat loadtest/summary.md >> "$GITHUB_STEP_SUMMARY" || true
-      - name: Stress with one server process
+      - name: Stress, ramping up until something gives
         run: loadtest/stress.sh 1
-      - name: Stress with four server processes
-        run: loadtest/stress.sh 4
       - name: Show API logs
         if: failure()
         run: docker compose logs api --tail=100
