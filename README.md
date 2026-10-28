@@ -48,6 +48,18 @@ Alpha. The `compare`, `calibrate` and `flaky` commands and the GitHub Action wor
 Trace ingestion is next. See the [changelog](CHANGELOG.md) for what changed in
 each release.
 
+## See it on a real agent
+
+[packages/agent](packages/agent) has a LangGraph agent that answers multi-hop HotpotQA questions
+with a local model. It is used to test signalfloor on real agent output. Two findings so far:
+
+- Hybrid search looked like the obvious choice, but at top 2 it was a real 8 point recall
+  regression against dense search alone, and its small win at top 10 was noise.
+- A new prompt raised F1 by about 9 points, well above a measured noise floor of 1.6 points.
+  It also quietly cut retrieval recall by 10 points, which the headline score hid.
+
+The [agent README](packages/agent/README.md) has the numbers and how to rerun them.
+
 ## Compare two eval runs
 
 Save each eval run as a JSON Lines file with one test case per line:
