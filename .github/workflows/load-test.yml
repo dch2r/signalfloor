@@ -1,0 +1,36 @@
+name: Load test
+
+# Load numbers are noisy and take a few minutes, so this doesn't run on every pull request.
+# Run it by hand, or let it run on changes to the load test itself.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - loadtest/**
+      - .github/workflows/load-test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    name: Load test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
+      - name: Start the stack
+        run: |
+          docker compose up --detach --build --wait api
+          nproc
+      - name: Run k6
+        run: k6 run loadtest/api.js
+      - name: Publish the summary
+        if: always()
+        run: cat loadtest/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Show API logs
+        if: failure()
+        run: docker compose logs api --tail=100
+      - name: Stop the stack
+        if: always()
+        run: docker compose down --volumes
