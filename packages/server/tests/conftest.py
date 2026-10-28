@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from signalfloor_server import comparisons
 from signalfloor_server.app import create_app
 from signalfloor_server.config import Settings
 from signalfloor_server.migrate import downgrade, upgrade
@@ -37,6 +38,7 @@ def empty_tables(database_url: str) -> None:
 @pytest.fixture
 def clean_db(database_url: str) -> str:
     empty_tables(database_url)
+    comparisons._cache.clear()
     return database_url
 
 

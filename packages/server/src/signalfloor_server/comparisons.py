@@ -1,17 +1,34 @@
-"""Compare two stored runs. Used by the HTTP endpoint and by background jobs."""
+"""Compare two stored runs. Used by the HTTP endpoint and by background jobs.
+
+The bootstrap is the most expensive thing the server does. A load test showed comparisons
+using up every core and starving cheap requests like listing runs, so two things keep it in
+check:
+
+- Results with a fixed seed are cached. Runs never change after upload, so the same runs,
+  options and seed always give the same answer. The dashboard always uses seed 0.
+- At most one fewer bootstrap than there are cores runs at a time, leaving a core for the rest
+  of the server. Others wait their turn.
+"""
 
 from __future__ import annotations
 
+import os
 import uuid
+from collections import OrderedDict
+from functools import partial
 
+import anyio
 from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
-from starlette.concurrency import run_in_threadpool
 
 from signalfloor.compare import paired_bootstrap
 from signalfloor_server.models import CaseResult, Run
 from signalfloor_server.schemas import CaseDiff, ComparisonOut, RunDiffOut
+
+CACHE_SIZE = 1024
+_cache: OrderedDict[tuple[object, ...], ComparisonOut] = OrderedDict()
+_bootstraps = anyio.CapacityLimiter(max(1, (os.cpu_count() or 2) - 1))
 
 
 class RunNotFound(LookupError):
@@ -37,22 +54,34 @@ async def compare(
 
     Raises RunNotFound if a run doesn't exist and ValueError if the runs can't be paired.
     """
+    # Check the runs exist every time, so a run deleted after it was cached is still a 404.
+    for run_id in (baseline_id, candidate_id):
+        if await session.get(Run, run_id) is None:
+            raise RunNotFound(run_id)
+    key = (baseline_id, candidate_id, confidence, n_resamples, seed, shared_only)
+    if seed is not None and key in _cache:
+        _cache.move_to_end(key)
+        return _cache[key]
+
     baseline = await scores(session, baseline_id)
     candidate = await scores(session, candidate_id)
     if shared_only:
         shared = baseline.keys() & candidate.keys()
         baseline = {k: v for k, v in baseline.items() if k in shared}
         candidate = {k: v for k, v in candidate.items() if k in shared}
-    # The bootstrap is CPU bound. Run it in a thread so the event loop stays free.
-    result = await run_in_threadpool(
-        paired_bootstrap,
-        baseline,
-        candidate,
-        confidence=confidence,
-        n_resamples=n_resamples,
-        seed=seed,
+    # CPU bound, so it runs in a thread to keep the event loop free, and through the limiter.
+    result = await anyio.to_thread.run_sync(
+        partial(
+            paired_bootstrap,
+            baseline,
+            candidate,
+            confidence=confidence,
+            n_resamples=n_resamples,
+            seed=seed,
+        ),
+        limiter=_bootstraps,
     )
-    return ComparisonOut(
+    comparison = ComparisonOut(
         baseline_id=baseline_id,
         candidate_id=candidate_id,
         baseline_mean=result.baseline_mean,
@@ -65,11 +94,15 @@ async def compare(
         n_resamples=result.n_resamples,
         verdict=result.verdict.value,
     )
+    if seed is not None:
+        _cache[key] = comparison
+        if len(_cache) > CACHE_SIZE:
+            _cache.popitem(last=False)
+    return comparison
 
 
 async def scores(session: AsyncSession, run_id: uuid.UUID) -> dict[str, float]:
-    if await session.get(Run, run_id) is None:
-        raise RunNotFound(run_id)
+    """Every case's score in a run. The caller checks that the run exists."""
     rows = await session.execute(
         select(CaseResult.case_id, CaseResult.score).where(CaseResult.run_id == run_id)
     )

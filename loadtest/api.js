@@ -103,7 +103,10 @@ export function browse(runs) {
 }
 
 export function compare(runs) {
-  const response = http.get(`${API}/runs/${runs.baseline}/compare/${runs.candidate}?seed=0`, {
+  // Half like the dashboard, with seed 0, which the server can cache. Half with no seed, which
+  // it never caches, so every one of those runs a full bootstrap.
+  const query = Math.random() < 0.5 ? "?seed=0" : "";
+  const response = http.get(`${API}/runs/${runs.baseline}/compare/${runs.candidate}${query}`, {
     tags: { name: "compare" },
   });
   check(response, { "compare is 200": (r) => r.status === 200 });
