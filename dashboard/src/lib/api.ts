@@ -5,6 +5,9 @@ import createClient from "openapi-fetch";
 import type { components, paths } from "./api-types";
 
 export type Run = components["schemas"]["RunOut"];
+export type Comparison = components["schemas"]["ComparisonOut"];
+export type RunDiff = components["schemas"]["RunDiffOut"];
+export type CaseDiff = components["schemas"]["CaseDiff"];
 
 export const API_URL = process.env.SIGNALFLOOR_API_URL ?? "http://127.0.0.1:8000";
 
@@ -33,6 +36,27 @@ export function createApi(baseUrl: string = API_URL, fetchImpl: typeof fetch = f
   return {
     listRuns: (limit = 100) =>
       call(() => client.GET("/runs", { params: { query: { limit } } })),
+    getRun: (runId: string) =>
+      call(() => client.GET("/runs/{run_id}", { params: { path: { run_id: runId } } })),
+    // A fixed seed so the interval doesn't shift a little every time the page is reloaded.
+    compareRuns: (baselineId: string, candidateId: string) =>
+      call(() =>
+        client.GET("/runs/{baseline_id}/compare/{candidate_id}", {
+          params: {
+            path: { baseline_id: baselineId, candidate_id: candidateId },
+            query: { seed: 0 },
+          },
+        }),
+      ),
+    diffRuns: (baselineId: string, candidateId: string, limit = 20) =>
+      call(() =>
+        client.GET("/runs/{baseline_id}/diff/{candidate_id}", {
+          params: {
+            path: { baseline_id: baselineId, candidate_id: candidateId },
+            query: { limit },
+          },
+        }),
+      ),
   };
 }
 

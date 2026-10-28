@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { CompareForm } from "@/components/CompareForm";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RunsTable, RunsTableSkeleton } from "@/components/RunsTable";
 import { createApi } from "@/lib/api";
@@ -21,5 +22,11 @@ export default function RunsPage() {
 
 async function Runs() {
   const result = await createApi().listRuns();
-  return result.ok ? <RunsTable runs={result.data} /> : <ErrorNotice message={result.message} />;
+  if (!result.ok) return <ErrorNotice message={result.message} />;
+  return (
+    <>
+      <RunsTable runs={result.data} />
+      <CompareForm runs={result.data} />
+    </>
+  );
 }
