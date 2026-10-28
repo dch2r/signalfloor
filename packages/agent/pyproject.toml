@@ -10,6 +10,7 @@ authors = [{ name = "Diwesh Chaurasia" }]
 classifiers = ["Private :: Do Not Upload"]
 dependencies = [
     "httpx>=0.27",
+    "numpy>=1.26",
 ]
 
 [build-system]
