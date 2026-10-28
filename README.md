@@ -185,6 +185,8 @@ Then open http://localhost:3000 for the dashboard and http://localhost:8000/docs
 To run it on Kubernetes, use the Helm chart in [deploy/helm/signalfloor](deploy/helm/signalfloor).
 CI installs it on a kind cluster on every pull request.
 
+[loadtest](loadtest) has a k6 load test and what it found about where the API bends under load.
+
 ## Development
 
 To work on signalfloor itself you need [uv](https://docs.astral.sh/uv/) installed. Then:
