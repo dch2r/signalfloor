@@ -18,6 +18,10 @@ uv sync
 uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
 ```
 
+The server tests also need Postgres running locally with an empty database called
+`signalfloor_test`. On a Mac, install [Postgres.app](https://postgresapp.com) and run
+`createdb signalfloor_test`.
+
 ## Checks
 
 These are the same checks CI runs on every pull request:
