@@ -1,3 +1,5 @@
+import json
+
 import pytest
 import uvicorn
 
@@ -49,3 +51,11 @@ def test_prune_spans(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixt
 
     assert cli.main(["prune-spans"]) == 0
     assert "deleted 3 spans older than 30 days" in capsys.readouterr().out
+
+
+def test_openapi(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["openapi"]) == 0
+
+    schema = json.loads(capsys.readouterr().out)
+    assert schema["info"]["title"] == "signalfloor"
+    assert "/runs/{baseline_id}/compare/{candidate_id}" in schema["paths"]
