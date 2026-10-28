@@ -23,7 +23,8 @@ COPY packages/server packages/server
 RUN uv sync --locked --no-dev --package signalfloor-server --no-editable
 
 FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
-RUN useradd --system --uid 10001 --no-create-home signalfloor
+# A fixed, unprivileged uid that can't log in. Kubernetes can then check runAsNonRoot.
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin signalfloor
 COPY --from=build /app/.venv /app/.venv
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1
 USER 10001
