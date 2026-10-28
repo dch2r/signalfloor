@@ -36,6 +36,8 @@ services:
 
   api:
     <<: *server
+    # API_WORKERS sets how many server processes run. One process uses one CPU core.
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000", "--workers", "${API_WORKERS:-1}"]
     ports: ["8000:8000"]
     depends_on:
       migrate:

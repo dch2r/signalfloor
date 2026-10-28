@@ -25,6 +25,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     serve = commands.add_parser("serve", help="run the HTTP API")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="server processes (default 1). One process uses one CPU core.",
+    )
 
     commands.add_parser("migrate", help="bring the database schema up to date")
     commands.add_parser("openapi", help="print the OpenAPI schema as JSON")
@@ -53,7 +59,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         deleted = asyncio.run(_prune(settings, timedelta(days=args.older_than_days)))
         print(f"deleted {deleted} spans older than {args.older_than_days:g} days")
     else:
-        uvicorn.run(create_app(settings), host=args.host, port=args.port)
+        if args.workers == 1:
+            uvicorn.run(create_app(settings), host=args.host, port=args.port)
+        else:
+            # Each process builds its own app, so uvicorn needs to know how, not an app object.
+            # Every process reads its settings from the environment, like this one did.
+            uvicorn.run(
+                "signalfloor_server.app:create_app",
+                factory=True,
+                workers=args.workers,
+                host=args.host,
+                port=args.port,
+            )
     return 0
 
 
