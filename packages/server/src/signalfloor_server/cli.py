@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import signal
 from collections.abc import Sequence
@@ -26,6 +27,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8000)
 
     commands.add_parser("migrate", help="bring the database schema up to date")
+    commands.add_parser("openapi", help="print the OpenAPI schema as JSON")
 
     worker = commands.add_parser("worker", help="run background jobs until stopped")
     worker.add_argument(
@@ -42,6 +44,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "migrate":
         migrate.upgrade(settings.database_url)
         print("database schema is up to date")
+    elif args.command == "openapi":
+        print(json.dumps(create_app(settings).openapi(), indent=2))
     elif args.command == "worker":
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
         asyncio.run(_work(settings, args.poll_interval))
