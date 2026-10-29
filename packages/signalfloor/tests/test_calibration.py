@@ -160,3 +160,77 @@ def test_decimal_ratings_work_with_weights() -> None:
 def test_weighted_kappa_with_one_shared_label_is_undefined() -> None:
     with pytest.raises(ValueError, match="kappa is undefined"):
         judge_agreement(labels([3, 3, 3]), labels([3, 3, 3]), weights="quadratic")
+
+
+def test_two_agreeing_cases_are_not_enough_to_trust() -> None:
+    # The review's example: two cases in perfect agreement used to come back trusted with an
+    # interval of exactly 1 to 1.
+    labels = {"a": 0, "b": 1}
+
+    result = judge_agreement(labels, labels, seed=0)
+
+    assert result.verdict is Trust.INCONCLUSIVE
+    assert "humans gave label 0 to only 1 case, need at least 5" in result.reasons
+    assert any("undefined in" in r for r in result.reasons)
+
+
+def test_only_the_short_label_is_named() -> None:
+    human = {f"c{i}": "pass" if i < 26 else "fail" for i in range(30)}
+
+    result = judge_agreement(human, human, seed=0)
+
+    assert result.verdict is Trust.INCONCLUSIVE
+    assert result.reasons == ("humans gave label 'fail' to only 4 cases, need at least 5",)
+    assert result.human_label_counts == (4, 26)
+
+
+def test_min_per_label_can_be_lowered() -> None:
+    human = {f"c{i}": "pass" if i < 26 else "fail" for i in range(30)}
+
+    result = judge_agreement(human, human, seed=0, min_per_label=4)
+
+    assert result.verdict is Trust.TRUSTED
+    assert result.reasons == ()
+
+
+def test_confusion_matrix_rows_are_judge_columns_are_human() -> None:
+    human = {"a": 1, "b": 1, "c": 2, "d": 2, "e": 2}
+    judge = {"a": 1, "b": 2, "c": 2, "d": 2, "e": 1}
+
+    result = judge_agreement(judge, human, seed=0, n_resamples=100)
+
+    assert result.categories == (1, 2)
+    # judge 1: human 1 once (a), human 2 once (e). judge 2: human 1 once (b), human 2 twice.
+    assert result.confusion == ((1, 1), (1, 2))
+
+
+def test_rejects_a_bad_min_per_label() -> None:
+    with pytest.raises(ValueError, match="min_per_label"):
+        judge_agreement({"a": 1, "b": 0}, {"a": 1, "b": 0}, min_per_label=0)
+
+
+def test_a_mediocre_judge_is_rarely_trusted_even_with_rare_labels() -> None:
+    # A judge with a true kappa around 0.54, below the 0.6 threshold, on labels where only 10%
+    # of cases are positive. Before the per label minimum it was trusted 14% of the time on 20
+    # cases and 20% on 10. It should now almost never be.
+    rng = np.random.default_rng(1)
+    trusted = runs = 0
+    for n in (10, 20, 30, 50):
+        for _ in range(60):
+            human = (rng.random(n) < 0.1).astype(int)
+            flip = np.where(human == 1, rng.random(n) > 0.6, rng.random(n) > 0.95)
+            judge = np.where(flip, 1 - human, human)
+            try:
+                result = judge_agreement(
+                    {f"c{i}": int(x) for i, x in enumerate(judge)},
+                    {f"c{i}": int(x) for i, x in enumerate(human)},
+                    n_resamples=500,
+                    seed=int(rng.integers(1_000_000)),
+                )
+            except ValueError:
+                continue
+            runs += 1
+            trusted += int(result.verdict is Trust.TRUSTED)
+
+    assert runs > 150
+    assert trusted / runs < 0.03

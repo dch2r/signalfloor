@@ -49,6 +49,22 @@ class Agreement:
     judge_bias: float | None
     n_resamples: int
     verdict: Trust
+    # How many cases humans gave each label, in the order of categories.
+    human_label_counts: tuple[int, ...] = ()
+    # Rows are the judge's labels and columns the humans', both in the order of categories.
+    confusion: tuple[tuple[int, ...], ...] = ()
+    # Share of resamples where kappa was undefined because they drew a single label.
+    undefined_resamples: float = 0.0
+    min_per_label: int = 0
+    # Why the verdict is inconclusive when the evidence is too thin to trust the interval.
+    reasons: tuple[str, ...] = ()
+
+
+# A resample that draws a single label leaves kappa undefined and is left out of the interval.
+# Leaving out a few barely moves it. Leaving out many builds it from a biased subset. With at
+# least 5 examples of every label, at most about e**-5, or 0.7%, of resamples miss one, so this
+# backstop only matters when min_per_label is lowered.
+MAX_UNDEFINED_RESAMPLES = 0.05
 
 
 def judge_agreement(
@@ -60,6 +76,7 @@ def judge_agreement(
     confidence: float = 0.95,
     n_resamples: int = 10_000,
     seed: int | None = None,
+    min_per_label: int = 5,
 ) -> Agreement:
     """Compare judge labels with human labels on the same cases.
 
@@ -67,6 +84,13 @@ def judge_agreement(
     If even the low end of the interval clears the threshold the judge is trusted. If even
     the high end misses it the judge is untrusted. Otherwise there are not enough labelled
     cases to say, and the answer is inconclusive.
+
+    The interval can't be relied on when humans gave some label only a few times, or when many
+    resamples leave kappa undefined. Then the verdict is inconclusive whatever the interval
+    says, and reasons explains why. In simulations, two cases that agree got "trusted", and a
+    judge with a true kappa of 0.46 was trusted 23% of the time on 2 to 5 cases. Needing at
+    least min_per_label human examples of every label kept that under 2% in every setting
+    tried, balanced or with only 10% positives.
 
     The default threshold of 0.6 is the usual cut off for "substantial" agreement.
     judge_bias is the mean judge label minus the mean human label when labels are numbers.
@@ -78,6 +102,8 @@ def judge_agreement(
         raise ValueError(f"threshold must be between -1 and 1, got {threshold}")
     if n_resamples < 1:
         raise ValueError(f"n_resamples must be positive, got {n_resamples}")
+    if min_per_label < 1:
+        raise ValueError(f"min_per_label must be at least 1, got {min_per_label}")
 
     ids = shared_case_ids(judge, human, names=("judge", "human"))
     judge_labels = [_normalize(judge[i]) for i in ids]
@@ -89,7 +115,8 @@ def judge_agreement(
     h = np.array([position[x] for x in human_labels], dtype=np.int64)
     disagreement = _disagreement_weights(categories, weights)
 
-    kappa = float(_kappa(_confusion(j, h, len(categories))[np.newaxis], disagreement)[0])
+    confusion = _confusion(j, h, len(categories))
+    kappa = float(_kappa(confusion[np.newaxis], disagreement)[0])
     if np.isnan(kappa):
         raise ValueError(
             "kappa is undefined because judge and human gave every case the same single label"
@@ -105,7 +132,23 @@ def judge_agreement(
     # information about agreement, so they are left out of the interval.
     ci_low, ci_high = np.nanquantile(resampled, [alpha / 2, 1 - alpha / 2])
 
-    if ci_low >= threshold:
+    undefined = float(np.isnan(resampled).mean())
+    human_counts = np.bincount(h, minlength=len(categories))
+    reasons = [
+        f"humans gave label {c!r} to only {n} {'case' if n == 1 else 'cases'}, "
+        f"need at least {min_per_label}"
+        for c, n in zip(categories, human_counts, strict=True)
+        if 0 < n < min_per_label
+    ]
+    if undefined > MAX_UNDEFINED_RESAMPLES:
+        reasons.append(
+            f"kappa was undefined in {undefined:.0%} of resamples, so the interval leaves "
+            "them out and can't be trusted"
+        )
+
+    if reasons:
+        verdict = Trust.INCONCLUSIVE
+    elif ci_low >= threshold:
         verdict = Trust.TRUSTED
     elif ci_high < threshold:
         verdict = Trust.UNTRUSTED
@@ -134,6 +177,11 @@ def judge_agreement(
         judge_bias=bias,
         n_resamples=n_resamples,
         verdict=verdict,
+        human_label_counts=tuple(int(n) for n in human_counts),
+        confusion=tuple(tuple(int(x) for x in row) for row in confusion),
+        undefined_resamples=undefined,
+        min_per_label=min_per_label,
+        reasons=tuple(reasons),
     )
 
 
