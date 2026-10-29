@@ -151,12 +151,16 @@ only for a proven regression.
 
 ### Does it work?
 
-A [validation study](studies/validation) planted regressions of known size into the agent's
-real results, 24,000 trials in all. The usual rule, "fail if the mean dropped by more than
-0.02", shipped a real 3 point regression in 53% of 20 case evals and 20% of 200 case evals.
-signalfloor with `--margin 0.02` shipped one in at most 0.1% of trials. The study also caught
-signalfloor's own earlier pass rule shipping 30% of them on small evals. That is why passing
-now needs enough cases.
+A [validation study](studies/validation) planted changes of known size into the agent's real
+results, with three kinds of damage, and checked the result on 100 held-out questions. The
+usual rule, "fail if the mean dropped by more than the margin", shipped up to 47% of bad
+changes and failed up to 44% of acceptable ones. signalfloor's bounds shipped at most 1.2%
+and failed at most 1.7%.
+
+The price is honesty about small evals. Below the cases a margin needs, signalfloor mostly
+says "needs more evidence": at margin 0.02 it approved 3% of acceptable changes at 100
+cases. At margin 0.05 it approved 53% at 100 cases and 71% at 200. Pick the margin and the
+eval size together.
 
 Run `signalfloor compare --help` to see all options, including `--format json` for machine
 readable output.
