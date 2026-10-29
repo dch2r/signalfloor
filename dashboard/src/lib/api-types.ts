@@ -284,6 +284,8 @@ export interface components {
              * @default false
              */
             shared_only: boolean;
+            /** Margin */
+            margin?: number | null;
         };
         /** ComparisonOut */
         ComparisonOut: {
@@ -315,6 +317,12 @@ export interface components {
             n_resamples: number;
             /** Verdict */
             verdict: string;
+            /** Largest Drop Not Ruled Out */
+            largest_drop_not_ruled_out: number;
+            /** Margin */
+            margin?: number | null;
+            /** Decision */
+            decision?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -674,6 +682,8 @@ export interface operations {
                 seed?: number | null;
                 /** @description Compare only the cases both runs have, instead of refusing. */
                 shared_only?: boolean;
+                /** @description The largest drop you accept. Adds a pass or fail decision. */
+                margin?: number | null;
             };
             header?: never;
             path: {

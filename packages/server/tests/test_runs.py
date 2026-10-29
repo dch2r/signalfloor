@@ -339,3 +339,38 @@ def test_shared_only_still_needs_enough_shared_cases(client: TestClient) -> None
 
     assert response.status_code == 422
     assert "need at least 2 cases" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("margin", "decision"),
+    [(None, None), (0.5, "pass"), (0.1, "fail"), (0.3, "needs_more_evidence")],
+)
+def test_compare_with_a_margin(
+    client: TestClient, margin: float | None, decision: str | None
+) -> None:
+    # A drop of 0.3 with an interval of roughly 0.2 to 0.4.
+    baseline = upload(client, "base", [1.0] * 50 + [0.0] * 50)["id"]
+    candidate = upload(client, "cand", [1.0] * 20 + [0.0] * 80)["id"]
+    params: dict[str, float] = {"seed": 0} if margin is None else {"seed": 0, "margin": margin}
+
+    result = client.get(f"/runs/{baseline}/compare/{candidate}", params=params).json()
+
+    assert result["decision"] == decision
+    assert result["margin"] == margin
+    assert result["largest_drop_not_ruled_out"] == pytest.approx(-result["ci_low"])
+
+
+def test_inconclusive_compare(client: TestClient) -> None:
+    baseline = upload(client, "base", [0.5] * 8)["id"]
+    candidate = upload(client, "cand", [0.8, 0.2] * 4)["id"]
+
+    result = client.get(f"/runs/{baseline}/compare/{candidate}", params={"seed": 0}).json()
+
+    assert result["verdict"] == "inconclusive"
+    assert result["largest_drop_not_ruled_out"] > 0.1
+
+
+def test_negative_margin_is_rejected(client: TestClient) -> None:
+    run_id = upload(client)["id"]
+
+    assert client.get(f"/runs/{run_id}/compare/{run_id}", params={"margin": -1}).status_code == 422

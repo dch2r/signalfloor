@@ -387,6 +387,25 @@
               "title": "Shared Only"
             },
             "description": "Compare only the cases both runs have, instead of refusing."
+          },
+          {
+            "name": "margin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The largest drop you accept. Adds a pass or fail decision.",
+              "title": "Margin"
+            },
+            "description": "The largest drop you accept. Adds a pass or fail decision."
           }
         ],
         "responses": {
@@ -798,6 +817,18 @@
             "type": "boolean",
             "title": "Shared Only",
             "default": false
+          },
+          "margin": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin"
           }
         },
         "type": "object",
@@ -854,6 +885,32 @@
           "verdict": {
             "type": "string",
             "title": "Verdict"
+          },
+          "largest_drop_not_ruled_out": {
+            "type": "number",
+            "title": "Largest Drop Not Ruled Out"
+          },
+          "margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
           }
         },
         "type": "object",
@@ -868,7 +925,8 @@
           "confidence",
           "n_cases",
           "n_resamples",
-          "verdict"
+          "verdict",
+          "largest_drop_not_ruled_out"
         ],
         "title": "ComparisonOut"
       },
