@@ -100,10 +100,12 @@ cases       20
 change      +0.0039  (95% CI -0.1306 to +0.1513)
 
 verdict     inconclusive
-            the data can't rule out a drop of up to 0.1306
+            the data can't rule out a drop of up to 0.2771
 ```
 
-That is a 20 question eval. A drop of 13 points could hide in it.
+That is a 20 question eval, and a drop of 28 points could hide in it. That number is more than
+the interval's -0.13, because it also counts the cases the eval never drew. If a change broke
+17% of all questions, a 20 question eval would miss every one of them 2.5% of the time.
 
 ### Gate a release on a margin
 
@@ -112,19 +114,38 @@ kept apart from the verdict:
 
 | Decision | When | Exit code |
 |---|---|---|
-| pass | the whole interval is at or above `-margin`, so any drop is within it | 0 |
+| pass | the largest drop not ruled out is within the margin | 0 |
 | fail | the whole interval is below `-margin`, so the drop is larger | 1 |
-| needs more evidence | the interval straddles `-margin`, so the data can't tell | 3 |
+| needs more evidence | anything else: the data can't tell | 3 |
 
 ```console
 $ signalfloor compare v1.jsonl v2.jsonl --margin 0.02
 ...
 decision    needs more evidence (margin 0.02)
+            20 cases can't rule out a drop of 0.1684 even if nothing changed:
+            a change that broke 16.8% of cases could miss every one of them
+            a margin of 0.02 needs at least 183 cases
 ```
 
+A margin needs enough cases, because a small eval can miss a change that breaks a few
+questions outright. With scores between 0 and 1:
+
+| Margin | 0.01 | 0.02 | 0.03 | 0.05 | 0.10 |
+|---|---:|---:|---:|---:|---:|
+| Cases needed to pass | 368 | 183 | 122 | 72 | 36 |
+
 Needs more evidence fails a CI job too, because the eval was too small to show the change is
-safe. Add cases until it can. Without `--margin` the command exits with code 1 only for a
-proven regression.
+safe. Add cases or accept a wider margin. Without `--margin` the command exits with code 1
+only for a proven regression.
+
+### Does it work?
+
+A [validation study](studies/validation) planted regressions of known size into the agent's
+real results, 24,000 trials in all. The usual rule, "fail if the mean dropped by more than
+0.02", shipped a real 3 point regression in 53% of 20 case evals and 20% of 200 case evals.
+signalfloor with `--margin 0.02` shipped one in at most 0.1% of trials. The study also caught
+signalfloor's own earlier pass rule shipping 30% of them on small evals. That is why passing
+now needs enough cases.
 
 Run `signalfloor compare --help` to see all options, including `--format json` for machine
 readable output.
