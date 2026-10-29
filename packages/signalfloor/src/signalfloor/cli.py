@@ -18,7 +18,14 @@ from collections.abc import Sequence
 
 from signalfloor import __version__
 from signalfloor.calibration import Agreement, Trust, judge_agreement
-from signalfloor.compare import Comparison, Decision, PairingError, Verdict, paired_bootstrap
+from signalfloor.compare import (
+    Comparison,
+    Decision,
+    PairingError,
+    Verdict,
+    cases_needed,
+    paired_bootstrap,
+)
 from signalfloor.results import ResultsFileError, load_labels, load_scores
 from signalfloor.stability import FEW_RUNS, Stability, find_flaky
 
@@ -234,11 +241,24 @@ def _format_compare(r: Comparison) -> str:
         "",
         f"verdict     {_VERDICT_TEXT[r.verdict]}",
     ]
+    drop = r.largest_drop_not_ruled_out
     if r.verdict is Verdict.INCONCLUSIVE:
-        drop = r.largest_drop_not_ruled_out
         lines.append(f"            the data can't rule out a drop of up to {drop:.4f}")
-    if r.decision is not None:
+    if r.decision is not None and r.margin is not None:
         lines.append(f"decision    {_DECISION_TEXT[r.decision]} (margin {r.margin:g})")
+        unseen = r.unseen_share * r.max_case_drop
+        if r.decision is Decision.NEEDS_MORE_EVIDENCE and unseen > r.margin:
+            lines += [
+                f"            {r.n_cases} cases can't rule out a drop of {unseen:.4f} even if "
+                "nothing changed:",
+                f"            a change that broke {r.unseen_share:.1%} of cases could miss "
+                "every one of them",
+            ]
+            if r.margin > 0:
+                needed = cases_needed(
+                    r.margin, confidence=r.confidence, max_case_drop=r.max_case_drop
+                )
+                lines.append(f"            a margin of {r.margin:g} needs at least {needed} cases")
     elif r.verdict is Verdict.INCONCLUSIVE:
         lines.append("            set --margin to the largest drop you accept to get a decision")
     return "\n".join(lines)

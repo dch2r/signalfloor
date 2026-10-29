@@ -10,10 +10,20 @@ Two answers come out, kept apart on purpose:
   eval can be inconclusive about a large drop.
 - The decision is a release policy, and only exists when you give a margin: the largest drop
   you will accept. It passes only when the data shows any drop is smaller than that.
+
+The interval only knows about the cases that were drawn. If a change breaks a few percent of
+all cases, a small eval can easily contain none of them, every difference is zero, and the
+interval shrinks to nothing. So the drop we can't rule out also counts the cases the eval may
+have missed. If a share p of all cases had broken, an eval of n cases would show none of them
+with chance (1 - p) ** n. The largest p that still happens often enough is
+1 - alpha ** (1 / n), close to 3 / n (the rule of three). Those cases could each have dropped
+as far as a score can drop.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -50,11 +60,34 @@ class Comparison:
     verdict: Verdict
     margin: float | None = None
     decision: Decision | None = None
+    # The share of all cases that could have broken without one showing up in this eval.
+    unseen_share: float = 0.0
+    # How far one case's score can drop: 1 for scores between 0 and 1.
+    max_case_drop: float = 1.0
 
     @property
     def largest_drop_not_ruled_out(self) -> float:
-        """How large a drop the data still allows. Zero when the interval sits above zero."""
-        return max(0.0, -self.ci_low)
+        """How large a drop the data still allows, counting cases the eval may have missed.
+
+        Zero only when the improvement seen is large enough to outweigh those cases.
+        """
+        p = self.unseen_share
+        return max(0.0, -((1 - p) * self.ci_low - p * self.max_case_drop))
+
+
+def cases_needed(margin: float, *, confidence: float = 0.95, max_case_drop: float = 1.0) -> int:
+    """The fewest cases that can pass a margin even when nothing changed.
+
+    Below this, a change that broke a share margin / max_case_drop of all cases would too
+    often leave no trace in the eval. Raises ValueError for a margin of zero, which no number
+    of cases can pass.
+    """
+    if margin <= 0:
+        raise ValueError("no number of cases rules out every drop, so a margin of 0 never passes")
+    if margin >= max_case_drop:
+        return 1
+    alpha = (1 - confidence) / 2
+    return math.ceil(math.log(alpha) / math.log(1 - margin / max_case_drop))
 
 
 def paired_bootstrap(
@@ -73,10 +106,11 @@ def paired_bootstrap(
     whole interval sits below zero the candidate is worse, if it sits above zero it is
     better, and if it contains zero the data can't tell.
 
-    With a margin m, the decision is pass when the whole interval sits at or above -m, fail
-    when it sits below -m, and needs more evidence when it straddles -m. A margin of zero
-    almost never passes noisy data, because the data rarely rules out every possible drop.
-    Pick the largest drop you can live with.
+    With a margin m, the decision is fail when the whole interval sits below -m, pass when
+    the largest drop not ruled out is at most m, and needs more evidence otherwise. Passing
+    needs enough cases as well as a narrow interval: see cases_needed. A margin of zero passes
+    only an improvement large enough to outweigh the cases the eval may have missed. Pick the
+    largest drop you can live with.
     """
     if not 0 < confidence < 1:
         raise ValueError(f"confidence must be between 0 and 1, got {confidence}")
@@ -102,16 +136,12 @@ def paired_bootstrap(
     else:
         verdict = Verdict.INCONCLUSIVE
 
-    decision = None
-    if margin is not None:
-        if ci_high < -margin:
-            decision = Decision.FAIL
-        elif ci_low >= -margin:
-            decision = Decision.PASS
-        else:
-            decision = Decision.NEEDS_MORE_EVIDENCE
+    # Scores between 0 and 1 can drop by at most 1. Otherwise all we know is the range seen.
+    scores = np.concatenate([base, cand])
+    low, high = float(scores.min()), float(scores.max())
+    max_case_drop = 1.0 if low >= 0 and high <= 1 else high - low
 
-    return Comparison(
+    result = Comparison(
         baseline_mean=float(base.mean()),
         candidate_mean=float(cand.mean()),
         delta=float(diffs.mean()),
@@ -122,8 +152,18 @@ def paired_bootstrap(
         n_resamples=n_resamples,
         verdict=verdict,
         margin=margin,
-        decision=decision,
+        unseen_share=1 - (alpha / 2) ** (1 / n),
+        max_case_drop=max_case_drop,
     )
+    if margin is None:
+        return result
+    if ci_high < -margin:
+        decision = Decision.FAIL
+    elif result.largest_drop_not_ruled_out <= margin:
+        decision = Decision.PASS
+    else:
+        decision = Decision.NEEDS_MORE_EVIDENCE
+    return dataclasses.replace(result, decision=decision)
 
 
 def _paired_arrays(
@@ -149,4 +189,4 @@ def _bootstrap_means(
     return means
 
 
-__all__ = ["Comparison", "Decision", "PairingError", "Verdict", "paired_bootstrap"]
+__all__ = ["Comparison", "Decision", "PairingError", "Verdict", "cases_needed", "paired_bootstrap"]

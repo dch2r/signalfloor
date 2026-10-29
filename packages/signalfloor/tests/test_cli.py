@@ -57,14 +57,16 @@ def test_inconclusive_exits_with_code_0_and_says_what_it_cannot_rule_out(
     out = capsys.readouterr().out
     assert code == EXIT_OK
     assert "verdict     inconclusive" in out
-    assert "the data can't rule out a drop of up to 0.2" in out
+    assert "the data can't rule out a drop of up to 0.5113" in out
     assert "set --margin" in out
 
 
 @pytest.mark.parametrize(
     ("candidate", "margin", "code", "decision"),
     [
-        ("same", "0.02", EXIT_OK, "pass"),
+        ("same", "0.05", EXIT_OK, "pass"),
+        # 80 cases can't rule out a drop of 0.045, so identical runs can't pass 0.02.
+        ("same", "0.02", EXIT_NEEDS_MORE_EVIDENCE, "needs more evidence"),
         ("better", "0", EXIT_OK, "pass"),
         ("worse", "0.05", EXIT_REGRESSION, "fail"),
         # A drop of exactly 0.2 is shown, which a margin of 0.5 allows.
@@ -98,10 +100,24 @@ def test_margin_needs_more_evidence_when_the_interval_straddles_it(
 
 
 def test_margin_in_json(runs: dict[str, str], capsys: pytest.CaptureFixture[str]) -> None:
-    main(["compare", runs["base"], runs["same"], "--margin", "0.02", "--format", "json"])
+    main(["compare", runs["base"], runs["same"], "--margin", "0.05", "--format", "json"])
 
     result = json.loads(capsys.readouterr().out)
-    assert (result["margin"], result["decision"]) == (0.02, "pass")
+    assert (result["margin"], result["decision"]) == (0.05, "pass")
+    assert result["unseen_share"] == pytest.approx(0.0451, abs=1e-4)
+    assert result["max_case_drop"] == 1
+
+
+def test_says_how_many_cases_a_margin_needs(
+    runs: dict[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["compare", runs["base"], runs["same"], "--seed", "0", "--margin", "0.02"])
+
+    out = capsys.readouterr().out
+    assert "the data can't rule out a drop of up to 0.0451" in out
+    assert "80 cases can't rule out a drop of 0.0451 even if nothing changed:\n" in out
+    assert "            a change that broke 4.5% of cases could miss every one of them" in out
+    assert "a margin of 0.02 needs at least 183 cases" in out
 
 
 def test_negative_margin_is_a_usage_error(

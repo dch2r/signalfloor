@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from signalfloor.compare import Decision, PairingError, Verdict, paired_bootstrap
+from signalfloor.compare import Decision, PairingError, Verdict, cases_needed, paired_bootstrap
 
 
 def run(scores: list[float]) -> dict[str, float]:
@@ -162,8 +162,12 @@ def test_inconclusive_reports_the_largest_drop_it_cannot_rule_out() -> None:
     result = paired_bootstrap(base, noisy, seed=0)
 
     assert result.verdict is Verdict.INCONCLUSIVE
-    assert result.largest_drop_not_ruled_out == pytest.approx(-result.ci_low)
-    assert result.largest_drop_not_ruled_out > 0.1
+    # Eight cases could also miss a change that broke over a third of all cases.
+    unseen = result.unseen_share
+    assert unseen == pytest.approx(1 - 0.025 ** (1 / 8))
+    expected = -(1 - unseen) * result.ci_low + unseen
+    assert result.largest_drop_not_ruled_out == pytest.approx(expected)
+    assert result.largest_drop_not_ruled_out > -result.ci_low
     assert result.decision is None
 
 
@@ -174,14 +178,68 @@ def test_largest_drop_is_zero_for_a_proven_improvement() -> None:
     assert paired_bootstrap(base, better, seed=0).largest_drop_not_ruled_out == 0
 
 
-def test_a_zero_margin_never_passes_an_unproven_change() -> None:
-    # Identical runs: the interval is exactly zero. That shows no drop, so it passes. A noisy
-    # inconclusive result can't, because a drop is still possible.
+def test_a_zero_margin_passes_only_a_clear_improvement() -> None:
     same = {f"c{i}": 0.5 for i in range(20)}
     noisy = {f"c{i}": 0.6 if i % 2 else 0.4 for i in range(20)}
+    better = {f"c{i}": 0.9 for i in range(20)}
 
-    assert paired_bootstrap(same, same, seed=0, margin=0).decision is Decision.PASS
+    # Identical runs show no drop, but 20 cases could have missed one.
+    assert paired_bootstrap(same, same, seed=0, margin=0).decision is Decision.NEEDS_MORE_EVIDENCE
     assert paired_bootstrap(same, noisy, seed=0, margin=0).decision is Decision.NEEDS_MORE_EVIDENCE
+    assert paired_bootstrap(same, better, seed=0, margin=0).decision is Decision.PASS
+
+
+def test_a_regression_hidden_in_cases_the_eval_never_drew() -> None:
+    # The study in studies/validation found this. A change broke 4 of 100 questions and a
+    # 20 case eval drew none of them, so every difference is zero and the interval is [0, 0].
+    # That used to pass a margin of 0.02 although the real drop is 0.04.
+    sample = {f"c{i}": 1.0 if i < 5 else 0.0 for i in range(20)}
+
+    result = paired_bootstrap(sample, sample, seed=0, margin=0.02)
+
+    assert (result.ci_low, result.ci_high) == (0, 0)
+    assert result.decision is Decision.NEEDS_MORE_EVIDENCE
+    assert result.largest_drop_not_ruled_out > 0.04
+
+
+def test_enough_cases_pass_a_margin_and_one_fewer_does_not() -> None:
+    needed = cases_needed(0.02)
+
+    def decide(n: int) -> Decision | None:
+        same = {f"c{i}": float(i % 2) for i in range(n)}
+        return paired_bootstrap(same, same, seed=0, margin=0.02).decision
+
+    assert decide(needed) is Decision.PASS
+    assert decide(needed - 1) is Decision.NEEDS_MORE_EVIDENCE
+
+
+@pytest.mark.parametrize(
+    ("margin", "kwargs", "expected"),
+    [
+        (0.02, {}, 183),
+        (0.05, {}, 72),
+        (0.1, {}, 36),
+        (0.05, {"confidence": 0.9}, 59),
+        (5.0, {"max_case_drop": 100.0}, 72),
+        (1.0, {}, 1),
+    ],
+)
+def test_cases_needed(margin: float, kwargs: dict[str, float], expected: int) -> None:
+    assert cases_needed(margin, **kwargs) == expected
+
+
+def test_no_number_of_cases_passes_a_zero_margin() -> None:
+    with pytest.raises(ValueError, match="margin of 0 never passes"):
+        cases_needed(0)
+
+
+def test_scores_outside_0_to_1_use_the_range_seen() -> None:
+    base = {f"c{i}": float(i) for i in range(50)}
+
+    result = paired_bootstrap(base, base, seed=0)
+
+    assert result.max_case_drop == 49
+    assert paired_bootstrap({"a": 0.2, "b": 0.9}, {"a": 0.2, "b": 0.9}).max_case_drop == 1
 
 
 @pytest.mark.parametrize("margin", [-0.01, float("nan"), float("inf")])
