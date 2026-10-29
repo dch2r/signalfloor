@@ -15,6 +15,11 @@ database:
   url: ""
   existingSecret: ""
 
+auth:
+  # Comma separated API keys. Empty leaves the API open to anything that can reach it, which
+  # only suits a cluster nobody else can reach. The dashboard sends the first key.
+  apiKeys: ""
+
 postgresql:
   # A single Postgres pod, for trying the chart out. Use a managed database in production.
   enabled: true

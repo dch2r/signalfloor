@@ -29,6 +29,10 @@ helm install signalfloor deploy/helm/signalfloor \
 
 The Secret needs the key `SIGNALFLOOR_DATABASE_URL`. See `values.yaml` for every setting.
 
+Set `auth.apiKeys` to require API keys. Separate several with commas, escaped as `\,` inside
+`--set`. Empty leaves the API open to anything in the cluster that can reach it. The dashboard
+has no login of its own, so put it behind your own sign in before exposing it.
+
 ## How it fits together
 
 - **Migrations run as a plain Job, once per release.** It is not a Helm hook. Helm runs
