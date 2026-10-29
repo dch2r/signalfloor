@@ -142,13 +142,20 @@ often the judge agrees with you. Put the judge labels and the human labels in tw
 Labels can be numbers, true/false or text. Then run:
 
 ```console
-$ signalfloor calibrate judge.jsonl human.jsonl --weights quadratic
-cases       150
+$ signalfloor calibrate examples/judge.jsonl examples/human.jsonl --weights quadratic
+cases       120
 labels      1, 2, 3, 4, 5
 weights     quadratic
-agreement   81.3%
-kappa       0.944  (95% CI 0.918 to 0.964)
-judge bias  +0.080  (more lenient than humans)
+agreement   86.7%
+kappa       0.955  (95% CI 0.929 to 0.975)
+judge bias  +0.133  (more lenient than humans)
+
+judge \ human       1      2      3      4      5
+  1                 9      0      0      0      0
+  2                 2     12      0      0      0
+  3                 0      2     15      0      0
+  4                 0      0      4     41      0
+  5                 0      0      0      8     27
 
 verdict     trusted (threshold 0.6)
 ```
@@ -157,10 +164,20 @@ Plain agreement can fool you. If 90% of answers are good, a judge that always sa
 agrees with humans 90% of the time without checking anything. Cohen's kappa removes the
 agreement you would get by chance, so that judge scores 0.
 
+The table shows where the judge goes wrong, not just how often. Rows are the judge's labels and
+columns the humans'. Here every mistake is one step too generous, which is what the positive
+bias means.
+
 Use `--weights linear` or `--weights quadratic` for ordered ratings like 1 to 5, so a 4
 against a human 5 counts as close. The judge is trusted only when the whole confidence
-interval is above the threshold. With too few labelled cases the verdict is inconclusive
-and the command tells you to label more. It exits with code 0 only when the judge is trusted.
+interval is above the threshold. It exits with code 0 only when the judge is trusted.
+
+**It won't trust a judge on thin evidence.** Every label the humans used needs at least 5
+examples, or the verdict is inconclusive and says which labels are short. Without that rule,
+two cases in perfect agreement came back trusted, and in simulations a judge whose true kappa
+was 0.54, below the threshold, was trusted up to 20% of the time when only 10% of cases were
+positive. With it, that stayed under 2% in every setting tried. Change the minimum with
+`--min-per-label`.
 
 ## Find flaky cases and your noise floor
 
