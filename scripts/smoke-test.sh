@@ -86,7 +86,7 @@ echo "ok: a trace went in and came back"
 RUNS_PAGE=$(curl -fsS "$DASHBOARD")
 [[ $RUNS_PAGE == *"smoke candidate"* ]] || fail "dashboard doesn't list the runs"
 COMPARE_PAGE=$(curl -fsS "$DASHBOARD/compare?baseline=$BASELINE&candidate=$CANDIDATE")
-[[ $COMPARE_PAGE == *"Real regression"* ]] || fail "dashboard compare page doesn't show the regression"
+[[ $COMPARE_PAGE == *">Regression<"* ]] || fail "dashboard compare page doesn't show the regression"
 echo "ok: the dashboard shows the runs and the regression"
 
 echo "smoke test passed"
