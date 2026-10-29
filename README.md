@@ -89,9 +89,44 @@ change      -0.1033  (95% CI -0.1400 to -0.0700)
 verdict     regression
 ```
 
-The command exits with code 1 when the candidate is a real regression and 0 otherwise, so
-you can use it to fail a CI job. Run `signalfloor compare --help` to see all options,
-including `--format json` for machine readable output.
+The verdict is `regression`, `improvement` or `inconclusive`. Inconclusive means the
+interval contains zero. It does not mean nothing changed: a small eval can be inconclusive about
+a large drop, so the command says how large a drop it can't rule out:
+
+```console
+$ signalfloor compare v1.jsonl v2.jsonl
+cases       20
+change      +0.0039  (95% CI -0.1306 to +0.1513)
+
+verdict     inconclusive
+            the data can't rule out a drop of up to 0.1306
+```
+
+That is a 20 question eval. A drop of 13 points could hide in it.
+
+### Gate a release on a margin
+
+To decide whether to ship, say how large a drop you accept with `--margin`. The decision is
+kept apart from the verdict:
+
+| Decision | When | Exit code |
+|---|---|---|
+| pass | the whole interval is at or above `-margin`, so any drop is within it | 0 |
+| fail | the whole interval is below `-margin`, so the drop is larger | 1 |
+| needs more evidence | the interval straddles `-margin`, so the data can't tell | 3 |
+
+```console
+$ signalfloor compare v1.jsonl v2.jsonl --margin 0.02
+...
+decision    needs more evidence (margin 0.02)
+```
+
+Needs more evidence fails a CI job too, because the eval was too small to show the change is
+safe. Add cases until it can. Without `--margin` the command exits with code 1 only for a
+proven regression.
+
+Run `signalfloor compare --help` to see all options, including `--format json` for machine
+readable output.
 
 ## Check if your LLM judge can be trusted
 

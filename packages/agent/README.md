@@ -28,11 +28,11 @@ verdict     regression
 
 $ signalfloor compare recall_dense_k10.jsonl recall_hybrid_k10.jsonl
 change      +0.0200  (95% CI -0.0025 to +0.0425)
-verdict     no detectable change
+verdict     inconclusive
 ```
 
 At k=2 hybrid is really worse, because the weaker BM25 ranking pulls good dense results down.
-At k=10 its small lead is within noise. So the agent uses dense retrieval by default.
+At k=10 its small lead isn't shown to be real. So the agent uses dense retrieval by default.
 
 Building the dense index for 1,991 passages took about 9.5 minutes on a 2020 Intel MacBook Pro.
 The embeddings are cached, so later runs start in seconds.
@@ -102,7 +102,7 @@ it and the search takes 36 ms.
 ### Traced runs of both prompts
 
 `results/traced-v1-20q.jsonl` and `results/traced-v2-20q.jsonl` are both prompts on the first 20
-questions with tracing on. On 20 questions signalfloor calls it no real change: F1 0.319 against
+questions with tracing on. On 20 questions signalfloor calls it inconclusive: F1 0.319 against
 0.323, interval -0.131 to +0.151. Twenty cases are far too few to tell these prompts apart.
 
 The traces still explain single cases. The biggest drop, question `5abd94525542992ac4f382d2`,
