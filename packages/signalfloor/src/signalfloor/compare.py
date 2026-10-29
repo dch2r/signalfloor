@@ -197,8 +197,8 @@ def paired_bootstrap(
         unseen_share=1 - (alpha / 2) ** (1 / n),
         max_case_drop=highest - lowest,
         missing_cases=missing_cases,
-        min_diff=float(diffs.min()),
-        max_diff=float(diffs.max()),
+        min_diff=float(np.min(diffs)),
+        max_diff=float(np.max(diffs)),
     )
     low, high = result.bound_low, result.bound_high
     if high < 0:
