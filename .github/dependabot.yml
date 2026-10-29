@@ -40,6 +40,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+    ignore:
+      # Stay on Node LTS, which .nvmrc pins to 24. Odd majors like 25 are never LTS.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker-compose
     directory: /
