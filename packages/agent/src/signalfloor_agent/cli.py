@@ -14,7 +14,10 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from signalfloor_agent import tracing
+import httpx
+import openai
+
+from signalfloor_agent import manifest, tracing
 from signalfloor_agent.agent import PROMPTS, Agent, AgentConfig, openai_compatible_chat_model
 from signalfloor_agent.data import Dataset, default_cache_dir, load_hotpot
 from signalfloor_agent.embeddings import NOMIC_PREFIXES, OpenAICompatibleEmbedder
@@ -61,6 +64,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as e:
         print(f"signalfloor-agent: error: {e}", file=sys.stderr)
         return 2
+    except (openai.APIConnectionError, httpx.ConnectError):
+        # One clear line instead of a hundred lines of traceback from inside LangChain.
+        print(
+            f"signalfloor-agent: error: can't reach the model server at {args.base_url}. "
+            "Is Ollama running? Results so far are saved, and running the same command again "
+            "resumes.",
+            file=sys.stderr,
+        )
+        return 1
 
 
 def _run_eval(args: argparse.Namespace) -> int:
@@ -69,6 +81,15 @@ def _run_eval(args: argparse.Namespace) -> int:
 
     dataset = load_hotpot(args.corpus_questions, offset=args.offset)
     questions = dataset.questions[: args.questions]
+    # Before any work, so a mismatched resume fails at once instead of after building indexes.
+    manifest.check_or_write(
+        args.out,
+        run_identity(args, dataset),
+        {
+            "git_commit": manifest.git_commit(),
+            "model_digest": manifest.model_digest(args.model, args.base_url),
+        },
+    )
     agent = build_agent(args, dataset)
 
     provider = tracing.configure(args.otlp_endpoint) if args.otlp_endpoint else None
@@ -86,6 +107,30 @@ def _run_eval(args: argparse.Namespace) -> int:
     )
     print(f"results in {args.out}")
     return 0
+
+
+def run_identity(args: argparse.Namespace, dataset: Dataset) -> dict[str, object]:
+    """Everything that changes the results of a run. See manifest.py.
+
+    The number of questions is left out on purpose: a run can be extended with more questions
+    from the same offset, because they are a prefix of the same list.
+    """
+    dense = args.retriever != "keyword"
+    return {
+        "prompt": args.prompt,
+        "prompt_sha256": manifest.sha256(PROMPTS[args.prompt]),
+        "model": args.model,
+        "base_url": args.base_url,
+        "retriever": args.retriever,
+        "embedding_model": args.embedding_model if dense else None,
+        "max_searches": args.max_searches,
+        "passages_per_search": args.passages,
+        "dataset": manifest.DATASET,
+        "offset": args.offset,
+        "corpus_questions": args.corpus_questions,
+        "corpus_sha256": manifest.corpus_hash(dataset.corpus),
+        "code_sha256": manifest.code_hash(),
+    }
 
 
 def build_agent(args: argparse.Namespace, dataset: Dataset) -> Agent:
