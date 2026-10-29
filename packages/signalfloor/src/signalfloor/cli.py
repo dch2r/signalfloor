@@ -119,6 +119,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0.6,
         help="minimum kappa to trust the judge (default: 0.6)",
     )
+    calibrate.add_argument(
+        "--min-per-label",
+        type=int,
+        default=5,
+        help="human examples each label needs before the judge can be trusted (default: 5)",
+    )
     _add_common_options(calibrate)
     calibrate.set_defaults(handler=_run_calibrate)
 
@@ -199,6 +205,7 @@ def _run_calibrate(args: argparse.Namespace) -> int:
         confidence=args.confidence,
         n_resamples=args.resamples,
         seed=args.seed,
+        min_per_label=args.min_per_label,
     )
     print(_to_json(result) if args.format == "json" else _format_calibrate(result))
     return EXIT_OK if result.verdict is Trust.TRUSTED else EXIT_UNTRUSTED
@@ -249,8 +256,22 @@ def _format_calibrate(r: Agreement) -> str:
     if r.judge_bias is not None:
         lean = "more lenient" if r.judge_bias > 0 else "stricter" if r.judge_bias < 0 else "even"
         lines.append(f"judge bias  {r.judge_bias:+.3f}  ({lean} than humans)")
-    lines += ["", f"verdict     {_TRUST_TEXT[r.verdict]} (threshold {r.threshold})"]
+    lines += ["", *_confusion_table(r), ""]
+    lines.append(f"verdict     {_TRUST_TEXT[r.verdict]} (threshold {r.threshold})")
+    lines += [f"why         {reason}" for reason in r.reasons]
     return "\n".join(lines)
+
+
+def _confusion_table(r: Agreement) -> list[str]:
+    # Which labels the judge gets wrong, not just how often. Rows are the judge's labels.
+    names = [str(c) for c in r.categories]
+    width = max(5, *(len(n) for n in names)) + 2
+    header = "judge \\ human".ljust(14) + "".join(n.rjust(width) for n in names)
+    rows = [
+        f"  {name}".ljust(14) + "".join(str(x).rjust(width) for x in row)
+        for name, row in zip(names, r.confusion, strict=True)
+    ]
+    return [header, *rows]
 
 
 def _format_flaky(r: Stability, top: int) -> str:

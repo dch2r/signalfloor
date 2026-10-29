@@ -394,3 +394,30 @@ def test_flaky_has_no_notes_with_many_steady_runs(
     main(["flaky", *paths])
 
     assert "note" not in capsys.readouterr().out
+
+
+def test_calibrate_shows_the_confusion_matrix_and_why_it_is_unsure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    labels = tmp_path / "l.jsonl"
+    labels.write_text('{"id": "a", "label": 0}\n{"id": "b", "label": 1}\n', encoding="utf-8")
+
+    code = main(["calibrate", str(labels), str(labels), "--seed", "0"])
+
+    out = capsys.readouterr().out
+    assert code == EXIT_UNTRUSTED
+    assert "judge \\ human" in out
+    assert "why         humans gave label 0 to only 1 case, need at least 5" in out
+
+
+def test_calibrate_min_per_label_option(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    labels = tmp_path / "l.jsonl"
+    lines = [json.dumps({"id": f"c{i}", "label": i % 2}) for i in range(8)]
+    labels.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    assert main(["calibrate", str(labels), str(labels), "--seed", "0"]) == EXIT_UNTRUSTED
+    capsys.readouterr()
+    assert (
+        main(["calibrate", str(labels), str(labels), "--seed", "0", "--min-per-label", "4"])
+        == EXIT_OK
+    )
