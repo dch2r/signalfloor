@@ -249,8 +249,9 @@ Add a step after the job that produces your eval results:
     files: evals/baseline.jsonl evals/candidate.jsonl
 ```
 
-The step fails only when the candidate is a real regression, and the result is written to
-the job summary. `command` can be `compare`, `calibrate` or `flaky`. Pass any other command
+The step fails when the candidate is a real regression, and the result is written to the job
+summary. With `options: --margin 0.05` it also fails when the eval can't show the drop is
+within the margin. `command` can be `compare`, `calibrate` or `flaky`. Pass any other command
 line options through `options`, for example `options: --confidence 0.99`. The step also sets
 an `exit-code` output.
 

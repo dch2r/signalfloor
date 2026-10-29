@@ -68,5 +68,7 @@ runs:
 
         if [ "$code" -eq 1 ]; then
           echo "::error title=signalfloor $SF_COMMAND::check failed, see the job summary"
+        elif [ "$code" -eq 3 ]; then
+          echo "::error title=signalfloor $SF_COMMAND::needs more evidence, see the job summary"
         fi
         exit "$code"
