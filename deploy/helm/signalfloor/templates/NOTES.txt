@@ -4,6 +4,16 @@ signalfloor is installed. To try it from your machine:
   kubectl port-forward svc/{{ include "signalfloor.fullname" . }}-api 8000:8000
 
 Then open http://localhost:3000. Agents send traces to http://localhost:8000/v1/traces.
+{{- if .Values.auth.apiKeys }}
+
+The API needs a key. Agents send it with
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <key>".
+{{- else }}
+
+auth.apiKeys is empty, so the API is open to anything that can reach it.
+{{- end }}
+
+The dashboard has no login of its own. Put it behind your own sign in before exposing it.
 {{- if .Values.postgresql.enabled }}
 
 This uses the built in single Postgres pod, which is for trying the chart out. Set

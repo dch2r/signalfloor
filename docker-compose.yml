@@ -11,6 +11,8 @@ x-server: &server
   image: signalfloor-server:local
   environment:
     SIGNALFLOOR_DATABASE_URL: postgresql+asyncpg://signalfloor:signalfloor@postgres:5432/signalfloor
+    # Set SIGNALFLOOR_API_KEY before starting to require it. Unset, the API is open.
+    SIGNALFLOOR_API_KEYS: ${SIGNALFLOOR_API_KEY:-}
 
 services:
   postgres:
@@ -66,6 +68,7 @@ services:
     ports: ["3000:3000"]
     environment:
       SIGNALFLOOR_API_URL: http://api:8000
+      SIGNALFLOOR_API_KEY: ${SIGNALFLOOR_API_KEY:-}
     depends_on:
       api:
         condition: service_healthy

@@ -17,6 +17,7 @@ spec:
       annotations:
         # Restart the pods when the database URL changes.
         checksum/database: {{ include "signalfloor.databaseUrl" . | sha256sum }}
+        checksum/api-keys: {{ .Values.auth.apiKeys | sha256sum }}
     spec:
       securityContext:
         {{- include "signalfloor.podSecurity" . | nindent 8 }}
@@ -30,6 +31,7 @@ spec:
               containerPort: 8000
           env:
             {{- include "signalfloor.serverEnv" . | nindent 12 }}
+            {{- include "signalfloor.apiKeyEnv" (dict "root" . "name" "SIGNALFLOOR_API_KEYS") | nindent 12 }}
           livenessProbe:
             httpGet: {path: /health/live, port: http}
             periodSeconds: 10

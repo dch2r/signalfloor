@@ -59,3 +59,14 @@ capabilities:
       name: {{ include "signalfloor.databaseSecret" . }}
       key: SIGNALFLOOR_DATABASE_URL
 {{- end -}}
+
+
+{{- define "signalfloor.apiKeyEnv" -}}
+{{- if .root.Values.auth.apiKeys }}
+- name: {{ .name }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "signalfloor.fullname" .root }}-api-keys
+      key: {{ .name }}
+{{- end }}
+{{- end -}}

@@ -89,6 +89,9 @@ jobs:
   containers:
     name: Containers
     runs-on: ubuntu-latest
+    env:
+      # Run the stack with an API key, so the smoke test covers auth.
+      SIGNALFLOOR_API_KEY: ci-smoke-key
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build and start the stack
@@ -105,6 +108,8 @@ jobs:
   kubernetes:
     name: Kubernetes
     runs-on: ubuntu-latest
+    env:
+      SIGNALFLOOR_API_KEY: ci-smoke-key
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -126,9 +131,12 @@ jobs:
       - name: Load the images into the cluster
         run: kind load docker-image signalfloor-server:ci signalfloor-dashboard:ci --name signalfloor
       - name: Install
+        # Two keys, to cover rotation. Helm's --set splits on commas, so the one inside the
+        # value is escaped.
         run: |
           helm install signalfloor deploy/helm/signalfloor \
             --set image.server.tag=ci --set image.dashboard.tag=ci \
+            --set auth.apiKeys="$SIGNALFLOOR_API_KEY\\,second-key" \
             --wait --wait-for-jobs --timeout 5m
       - name: Upgrade
         # A second release runs a second migration job and rolls the pods.
