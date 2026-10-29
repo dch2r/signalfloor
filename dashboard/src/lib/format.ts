@@ -13,6 +13,11 @@ export function formatScore(score: number): string {
   return score.toFixed(3);
 }
 
+/** A share between 0 and 1 as a percentage, like 3.6%. */
+export function formatPercent(share: number): string {
+  return `${(share * 100).toFixed(1)}%`;
+}
+
 export function formatCount(n: number): string {
   return n.toLocaleString("en-US");
 }

@@ -22,7 +22,7 @@ from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from signalfloor.compare import paired_bootstrap
+from signalfloor.compare import cases_needed, paired_bootstrap
 from signalfloor_server.models import CaseResult, Run
 from signalfloor_server.schemas import CaseDiff, ComparisonOut, RunDiffOut
 
@@ -96,8 +96,15 @@ async def compare(
         n_resamples=result.n_resamples,
         verdict=result.verdict.value,
         largest_drop_not_ruled_out=result.largest_drop_not_ruled_out,
+        unseen_share=result.unseen_share,
+        max_case_drop=result.max_case_drop,
         margin=result.margin,
         decision=result.decision.value if result.decision else None,
+        cases_needed=(
+            cases_needed(margin, confidence=confidence, max_case_drop=result.max_case_drop)
+            if margin
+            else None
+        ),
     )
     if seed is not None:
         _cache[key] = comparison

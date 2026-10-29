@@ -319,10 +319,16 @@ export interface components {
             verdict: string;
             /** Largest Drop Not Ruled Out */
             largest_drop_not_ruled_out: number;
+            /** Unseen Share */
+            unseen_share: number;
+            /** Max Case Drop */
+            max_case_drop: number;
             /** Margin */
             margin?: number | null;
             /** Decision */
             decision?: string | null;
+            /** Cases Needed */
+            cases_needed?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {

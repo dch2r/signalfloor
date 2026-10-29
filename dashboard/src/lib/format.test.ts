@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCount, formatDate, formatDelta, formatScore } from "./format";
+import { formatCount, formatDate, formatDelta, formatPercent, formatScore } from "./format";
 
 describe("format", () => {
   it("shows dates in UTC", () => {
@@ -20,6 +20,11 @@ describe("format", () => {
   it("does not sign a change that rounds to zero", () => {
     expect(formatDelta(0)).toBe("0.000");
     expect(formatDelta(-0.0001)).toBe("0.000");
+  });
+
+  it("shows shares as percentages", () => {
+    expect(formatPercent(0.0362)).toBe("3.6%");
+    expect(formatPercent(1)).toBe("100.0%");
   });
 
   it("groups thousands", () => {
