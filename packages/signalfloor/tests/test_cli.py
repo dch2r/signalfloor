@@ -370,3 +370,27 @@ def test_flaky_bad_input_exits_2(
 
     assert main(["flaky", *paths, *extra]) == EXIT_USAGE
     assert message in capsys.readouterr().err
+
+
+def test_flaky_notes_shared_movement_and_few_runs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paths = [write_run(tmp_path / f"r{r}.jsonl", [float(r % 2)] * 50) for r in range(4)]
+
+    main(["flaky", *paths, "--max-flaky-rate", "1"])
+
+    out = capsys.readouterr().out
+    assert "from cases +/-" in out and "from runs +/-" in out
+    assert "whole runs move together" in out
+    assert "with 4 runs the estimate from runs is rough" in out
+
+
+def test_flaky_has_no_notes_with_many_steady_runs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    scores = [0.5, 0.6, 0.7, 0.8] * 10
+    paths = [write_run(tmp_path / f"r{r}.jsonl", scores) for r in range(5)]
+
+    main(["flaky", *paths])
+
+    assert "note" not in capsys.readouterr().out
