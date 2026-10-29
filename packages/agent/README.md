@@ -57,6 +57,24 @@ signalfloor compare results/v1.jsonl results/v2.jsonl
 If a run is stopped, run the same command again and it picks up where it left off. The first
 run builds the embedding index, which takes about 10 minutes on a laptop CPU.
 
+Each results file gets a manifest next to it, such as `results/v1.manifest.json`. It records
+everything that changes the results: the prompt and its hash, the model and retrieval settings,
+the questions and a hash of the corpus, and a hash of the agent's own code, which includes the
+scorer. It also notes the git commit and, from Ollama, the model's digest. A resume must match
+it exactly, so stopping a v1 run and resuming it with `--prompt v2` fails instead of leaving a
+file that is half one prompt and half the other:
+
+```console
+$ signalfloor-agent eval --prompt v2 --out results/v1.jsonl
+signalfloor-agent: error: results/v1.jsonl was started with a different setup. Resuming would mix two setups in one file:
+  prompt: 'v1' before, 'v2' now
+  prompt_sha256: 'f9f0...' before, '6eab...' now
+Write this run to a new file, or undo the change.
+```
+
+Asking for more questions is allowed, since the first questions stay the same. The result files
+already in `results/` were written before manifests existed.
+
 ## Tracing
 
 Pass `--otlp-endpoint` to record an OpenTelemetry trace for every question:
