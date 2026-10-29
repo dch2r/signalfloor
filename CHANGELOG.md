@@ -6,6 +6,19 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** the `no_change` verdict is now `inconclusive`, in the CLI text and in JSON.
+  An interval that contains zero means the data can't tell, not that nothing changed. If you
+  parse `--format json`, look for `"inconclusive"` instead of `"no_change"`.
+- An inconclusive comparison now says the largest drop the data can't rule out.
+
+### Added
+
+- `compare --margin`: the largest drop you accept. The result gets a decision of pass, fail
+  or needs more evidence, kept apart from the verdict. Needs more evidence exits with the new
+  code 3, so it fails a CI job.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added
