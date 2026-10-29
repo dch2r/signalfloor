@@ -6,6 +6,8 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-29
+
 ### Changed
 
 - **Breaking:** the `no_change` verdict is now `inconclusive`, in the CLI text and in JSON.
@@ -39,6 +41,11 @@ All notable changes to this project are listed here. The format follows
 - A validation study in `studies/validation` that plants regressions into real agent results
   and compares signalfloor with a plain threshold on the mean.
 
+### Fixed
+
+- The GitHub Action adds an error annotation for needs more evidence, as it already did for a
+  failed check.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added
@@ -64,6 +71,7 @@ First release.
 - Text and JSON output for every command.
 - Exit code 1 when a check fails and 2 for bad input, so every command works as a CI check.
 
-[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dch2r/signalfloor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dch2r/signalfloor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dch2r/signalfloor/releases/tag/v0.1.0
