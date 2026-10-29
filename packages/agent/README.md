@@ -58,11 +58,12 @@ If a run is stopped, run the same command again and it picks up where it left of
 run builds the embedding index, which takes about 10 minutes on a laptop CPU.
 
 Each results file gets a manifest next to it, such as `results/v1.manifest.json`. It records
-everything that changes the results: the prompt and its hash, the model and retrieval settings,
-the questions and a hash of the corpus, and a hash of the agent's own code, which includes the
-scorer. It also notes the git commit and, from Ollama, the model's digest. A resume must match
-it exactly, so stopping a v1 run and resuming it with `--prompt v2` fails instead of leaving a
-file that is half one prompt and half the other:
+the settings that change the results: the prompt and its hash, the model and retrieval
+settings, the digests of the model and the embedding model as Ollama reports them, a hash of
+the corpus, and a hash of the agent's own code, which includes the scorer. It also records
+each question's id with a hash of its text, gold answer and supporting facts, in order. A
+resume must match all of it, so stopping a v1 run and resuming it with `--prompt v2` fails
+instead of leaving a file that is half one prompt and half the other:
 
 ```console
 $ signalfloor-agent eval --prompt v2 --out results/v1.jsonl
@@ -72,7 +73,11 @@ signalfloor-agent: error: results/v1.jsonl was started with a different setup. R
 Write this run to a new file, or undo the change.
 ```
 
-Asking for more questions is allowed, since the first questions stay the same. The result files
+Asking for more questions is allowed, as long as the questions already run are unchanged.
+Things it can't catch: a model server that reports no digest can swap weights behind the same
+name, and anything outside the agent's code, such as a library upgrade, isn't hashed. The
+embedding cache is keyed by the embedding model's digest too, so new weights never reuse old
+vectors. That means the first run after this change rebuilds the index once. The result files
 already in `results/` were written before manifests existed.
 
 ## Tracing

@@ -46,6 +46,7 @@ class OpenAICompatibleEmbedder:
         query_prefix: str = "",
         batch_size: int = 32,
         client: httpx.Client | None = None,
+        revision: str | None = None,
     ) -> None:
         if batch_size < 1:
             raise ValueError(f"batch_size must be positive, got {batch_size}")
@@ -53,13 +54,16 @@ class OpenAICompatibleEmbedder:
         self.document_prefix = document_prefix
         self.query_prefix = query_prefix
         self.batch_size = batch_size
+        # The model's digest when the server reports one. It keys the embedding cache.
+        self.revision = revision
         self._url = base_url.rstrip("/") + "/embeddings"
         self._headers = {"Authorization": f"Bearer {api_key}"}
         self._client = client or httpx.Client(timeout=300)
 
     @property
     def name(self) -> str:
-        return f"{self.model}|{self.document_prefix}|{self.query_prefix}"
+        name = f"{self.model}|{self.document_prefix}|{self.query_prefix}"
+        return f"{name}|{self.revision}" if self.revision else name
 
     def embed_documents(self, texts: Sequence[str]) -> npt.NDArray[np.float32]:
         batches = [

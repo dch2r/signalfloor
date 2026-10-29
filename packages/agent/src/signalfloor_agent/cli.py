@@ -85,10 +85,8 @@ def _run_eval(args: argparse.Namespace) -> int:
     manifest.check_or_write(
         args.out,
         run_identity(args, dataset),
-        {
-            "git_commit": manifest.git_commit(),
-            "model_digest": manifest.model_digest(args.model, args.base_url),
-        },
+        {"git_commit": manifest.git_commit()},
+        manifest.question_fingerprints(questions),
     )
     agent = build_agent(args, dataset)
 
@@ -110,19 +108,23 @@ def _run_eval(args: argparse.Namespace) -> int:
 
 
 def run_identity(args: argparse.Namespace, dataset: Dataset) -> dict[str, object]:
-    """Everything that changes the results of a run. See manifest.py.
+    """The settings that change the results of a run. See manifest.py.
 
-    The number of questions is left out on purpose: a run can be extended with more questions
-    from the same offset, because they are a prefix of the same list.
+    The questions are checked separately, so a run can be extended with more questions from
+    the same offset.
     """
     dense = args.retriever != "keyword"
     return {
         "prompt": args.prompt,
         "prompt_sha256": manifest.sha256(PROMPTS[args.prompt]),
         "model": args.model,
+        "model_digest": manifest.model_digest(args.model, args.base_url),
         "base_url": args.base_url,
         "retriever": args.retriever,
         "embedding_model": args.embedding_model if dense else None,
+        "embedding_model_digest": (
+            manifest.model_digest(args.embedding_model, args.base_url) if dense else None
+        ),
         "max_searches": args.max_searches,
         "passages_per_search": args.passages,
         "dataset": manifest.DATASET,
@@ -153,6 +155,8 @@ def build_retriever(args: argparse.Namespace, dataset: Dataset) -> Retriever:
         base_url=args.base_url,
         document_prefix=NOMIC_PREFIXES["document_prefix"] if nomic else "",
         query_prefix=NOMIC_PREFIXES["query_prefix"] if nomic else "",
+        # New weights under the same name must not reuse cached vectors.
+        revision=manifest.model_digest(args.embedding_model, args.base_url),
     )
     dense = DenseRetriever(dataset.corpus, embedder, cache_dir=default_cache_dir())
     return dense if args.retriever == "dense" else HybridRetriever(keyword, dense)
