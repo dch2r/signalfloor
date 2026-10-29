@@ -2,6 +2,14 @@
 
 Scores are assumed to be "higher is better". Each run maps a test case ID to that case's
 score, and the two runs are paired by ID so a case is only ever compared with itself.
+
+Two answers come out, kept apart on purpose:
+
+- The verdict is what the data shows: a regression, an improvement, or inconclusive.
+  Inconclusive means the interval contains zero. It does not mean nothing changed. A small
+  eval can be inconclusive about a large drop.
+- The decision is a release policy, and only exists when you give a margin: the largest drop
+  you will accept. It passes only when the data shows any drop is smaller than that.
 """
 
 from __future__ import annotations
@@ -20,7 +28,13 @@ from signalfloor._resample import resample_chunks
 class Verdict(StrEnum):
     REGRESSION = "regression"
     IMPROVEMENT = "improvement"
-    NO_CHANGE = "no_change"
+    INCONCLUSIVE = "inconclusive"
+
+
+class Decision(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NEEDS_MORE_EVIDENCE = "needs_more_evidence"
 
 
 @dataclass(frozen=True)
@@ -34,6 +48,13 @@ class Comparison:
     n_cases: int
     n_resamples: int
     verdict: Verdict
+    margin: float | None = None
+    decision: Decision | None = None
+
+    @property
+    def largest_drop_not_ruled_out(self) -> float:
+        """How large a drop the data still allows. Zero when the interval sits above zero."""
+        return max(0.0, -self.ci_low)
 
 
 def paired_bootstrap(
@@ -43,18 +64,26 @@ def paired_bootstrap(
     confidence: float = 0.95,
     n_resamples: int = 10_000,
     seed: int | None = None,
+    margin: float | None = None,
 ) -> Comparison:
     """Estimate the change in mean score from baseline to candidate, with a confidence interval.
 
     For every case we take the difference candidate minus baseline. We then resample those
     differences with replacement many times and look at the spread of their means. If the
     whole interval sits below zero the candidate is worse, if it sits above zero it is
-    better, and if it contains zero we cannot tell the change apart from noise.
+    better, and if it contains zero the data can't tell.
+
+    With a margin m, the decision is pass when the whole interval sits at or above -m, fail
+    when it sits below -m, and needs more evidence when it straddles -m. A margin of zero
+    almost never passes noisy data, because the data rarely rules out every possible drop.
+    Pick the largest drop you can live with.
     """
     if not 0 < confidence < 1:
         raise ValueError(f"confidence must be between 0 and 1, got {confidence}")
     if n_resamples < 1:
         raise ValueError(f"n_resamples must be positive, got {n_resamples}")
+    if margin is not None and not (margin >= 0 and np.isfinite(margin)):
+        raise ValueError(f"margin must be zero or more, got {margin}")
 
     base, cand = _paired_arrays(baseline, candidate)
     diffs = cand - base
@@ -71,7 +100,16 @@ def paired_bootstrap(
     elif ci_low > 0:
         verdict = Verdict.IMPROVEMENT
     else:
-        verdict = Verdict.NO_CHANGE
+        verdict = Verdict.INCONCLUSIVE
+
+    decision = None
+    if margin is not None:
+        if ci_high < -margin:
+            decision = Decision.FAIL
+        elif ci_low >= -margin:
+            decision = Decision.PASS
+        else:
+            decision = Decision.NEEDS_MORE_EVIDENCE
 
     return Comparison(
         baseline_mean=float(base.mean()),
@@ -83,6 +121,8 @@ def paired_bootstrap(
         n_cases=n,
         n_resamples=n_resamples,
         verdict=verdict,
+        margin=margin,
+        decision=decision,
     )
 
 
@@ -109,4 +149,4 @@ def _bootstrap_means(
     return means
 
 
-__all__ = ["Comparison", "PairingError", "Verdict", "paired_bootstrap"]
+__all__ = ["Comparison", "Decision", "PairingError", "Verdict", "paired_bootstrap"]

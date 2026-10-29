@@ -2,9 +2,10 @@
 
 Exit codes:
     0  the check passed
-    1  the check failed: a real regression for compare, a judge that is not proven
-       trustworthy for calibrate, too many flaky cases for flaky
+    1  the check failed: a real regression for compare (or a drop past --margin), a judge
+       that is not proven trustworthy for calibrate, too many flaky cases for flaky
     2  bad input or usage
+    3  compare with --margin only: the data can't tell if the drop is within the margin
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from collections.abc import Sequence
 
 from signalfloor import __version__
 from signalfloor.calibration import Agreement, Trust, judge_agreement
-from signalfloor.compare import Comparison, PairingError, Verdict, paired_bootstrap
+from signalfloor.compare import Comparison, Decision, PairingError, Verdict, paired_bootstrap
 from signalfloor.results import ResultsFileError, load_labels, load_scores
 from signalfloor.stability import Stability, find_flaky
 
@@ -26,11 +27,24 @@ EXIT_REGRESSION = 1
 EXIT_UNTRUSTED = 1
 EXIT_TOO_FLAKY = 1
 EXIT_USAGE = 2
+EXIT_NEEDS_MORE_EVIDENCE = 3
 
 _VERDICT_TEXT = {
     Verdict.REGRESSION: "regression",
     Verdict.IMPROVEMENT: "improvement",
-    Verdict.NO_CHANGE: "no detectable change",
+    Verdict.INCONCLUSIVE: "inconclusive",
+}
+
+_DECISION_TEXT = {
+    Decision.PASS: "pass",
+    Decision.FAIL: "fail",
+    Decision.NEEDS_MORE_EVIDENCE: "needs more evidence",
+}
+
+_DECISION_EXIT = {
+    Decision.PASS: EXIT_OK,
+    Decision.FAIL: EXIT_REGRESSION,
+    Decision.NEEDS_MORE_EVIDENCE: EXIT_NEEDS_MORE_EVIDENCE,
 }
 
 _TRUST_TEXT = {
@@ -63,13 +77,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="compare two eval runs",
         description=(
             "Compare a candidate eval run against a baseline. Each file is JSON Lines with one "
-            "test case per line. Exits with code 1 if the candidate is a real regression."
+            "test case per line. Exits with code 1 if the candidate is a real regression. With "
+            "--margin, exits 0 only if any drop is shown to be within the margin, 1 if it is "
+            "shown to be larger, and 3 if the data can't tell."
         ),
     )
     compare.add_argument("baseline", help="results file for the current version")
     compare.add_argument("candidate", help="results file for the new version")
     compare.add_argument(
         "--score-key", default="score", help="field holding the score (default: score)"
+    )
+    compare.add_argument(
+        "--margin",
+        type=float,
+        help="the largest drop in mean score you will accept, such as 0.02",
     )
     _add_common_options(compare)
     compare.set_defaults(handler=_run_compare)
@@ -159,8 +180,11 @@ def _run_compare(args: argparse.Namespace) -> int:
         confidence=args.confidence,
         n_resamples=args.resamples,
         seed=args.seed,
+        margin=args.margin,
     )
     print(_to_json(result) if args.format == "json" else _format_compare(result))
+    if result.decision is not None:
+        return _DECISION_EXIT[result.decision]
     return EXIT_REGRESSION if result.verdict is Verdict.REGRESSION else EXIT_OK
 
 
@@ -195,16 +219,22 @@ def _to_json(result: Comparison | Agreement | Stability) -> str:
 
 def _format_compare(r: Comparison) -> str:
     level = f"{r.confidence:.0%}"
-    return "\n".join(
-        [
-            f"cases       {r.n_cases}",
-            f"baseline    {r.baseline_mean:.4f}",
-            f"candidate   {r.candidate_mean:.4f}",
-            f"change      {r.delta:+.4f}  ({level} CI {r.ci_low:+.4f} to {r.ci_high:+.4f})",
-            "",
-            f"verdict     {_VERDICT_TEXT[r.verdict]}",
-        ]
-    )
+    lines = [
+        f"cases       {r.n_cases}",
+        f"baseline    {r.baseline_mean:.4f}",
+        f"candidate   {r.candidate_mean:.4f}",
+        f"change      {r.delta:+.4f}  ({level} CI {r.ci_low:+.4f} to {r.ci_high:+.4f})",
+        "",
+        f"verdict     {_VERDICT_TEXT[r.verdict]}",
+    ]
+    if r.verdict is Verdict.INCONCLUSIVE:
+        drop = r.largest_drop_not_ruled_out
+        lines.append(f"            the data can't rule out a drop of up to {drop:.4f}")
+    if r.decision is not None:
+        lines.append(f"decision    {_DECISION_TEXT[r.decision]} (margin {r.margin:g})")
+    elif r.verdict is Verdict.INCONCLUSIVE:
+        lines.append("            set --margin to the largest drop you accept to get a decision")
+    return "\n".join(lines)
 
 
 def _format_calibrate(r: Agreement) -> str:
