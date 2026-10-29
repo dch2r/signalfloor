@@ -2,32 +2,72 @@ import type { Comparison } from "@/lib/api";
 import { formatDelta, formatScore } from "@/lib/format";
 import { axisExtent, toPercent } from "@/lib/interval";
 
+// The interval comes from resampling the eval's cases. It shows how much the result depends on
+// which cases happen to be in the eval set. It is not a measure of run to run noise.
 const VERDICTS: Record<string, { title: string; text: string; tone: string }> = {
   regression: {
     title: "Real regression",
-    text: "The candidate is worse, and the drop is larger than the noise between runs.",
+    text: "The candidate is worse, and the drop is too large to come from which cases happen to be in the eval set.",
     tone: "border-bad/50 bg-bad/10",
   },
   improvement: {
     title: "Real improvement",
-    text: "The candidate is better, and the gain is larger than the noise between runs.",
+    text: "The candidate is better, and the gain is too large to come from which cases happen to be in the eval set.",
     tone: "border-good/50 bg-good/10",
   },
-  no_change: {
-    title: "No real change",
-    text: "The difference is within the noise. It could go either way on a rerun.",
+  inconclusive: {
+    title: "Inconclusive",
+    text: "The interval includes zero, so the data can't tell which way this went. That is not the same as no change.",
     tone: "border-line bg-subtle",
   },
 };
 
+const DECISIONS: Record<string, { label: string; tone: string; text: (margin: string) => string }> = {
+  pass: {
+    label: "Pass",
+    tone: "bg-good/15 text-good",
+    text: (m) => `Any drop is shown to be no larger than ${m}.`,
+  },
+  fail: {
+    label: "Fail",
+    tone: "bg-bad/15 text-bad",
+    text: (m) => `The drop is shown to be larger than ${m}.`,
+  },
+  needs_more_evidence: {
+    label: "Needs more evidence",
+    tone: "bg-foreground/10",
+    text: (m) => `The data can't tell if the drop is within ${m}. More cases would narrow the interval.`,
+  },
+};
+
 export function VerdictBanner({ comparison }: { comparison: Comparison }) {
-  const verdict = VERDICTS[comparison.verdict] ?? VERDICTS.no_change;
+  const verdict = VERDICTS[comparison.verdict] ?? VERDICTS.inconclusive;
+  const decision = comparison.decision ? DECISIONS[comparison.decision] : undefined;
   const percent = Math.round(comparison.confidence * 100);
+  const margin = formatScore(comparison.margin ?? 0);
 
   return (
     <section className={`rounded-lg border p-5 ${verdict.tone}`}>
-      <p className="text-lg font-semibold">{verdict.title}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-lg font-semibold">{verdict.title}</p>
+        {decision && (
+          <span
+            data-testid="decision"
+            className={`rounded-full px-2.5 py-0.5 text-sm font-medium ${decision.tone}`}
+          >
+            {decision.label}
+          </span>
+        )}
+      </div>
       <p className="mt-1 text-sm text-muted">{verdict.text}</p>
+      {comparison.verdict === "inconclusive" && (
+        <p className="mt-1 text-sm">
+          A drop of up to{" "}
+          <strong className="font-mono">{formatScore(comparison.largest_drop_not_ruled_out)}</strong>{" "}
+          can&apos;t be ruled out.
+        </p>
+      )}
+      {decision && <p className="mt-1 text-sm">{decision.text(margin)}</p>}
 
       <dl className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <Stat label="Baseline mean" value={formatScore(comparison.baseline_mean)} />

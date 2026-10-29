@@ -6,7 +6,9 @@ with Next.js and TypeScript.
 It has three pages:
 
 - **Runs** lists every run, newest first, with a form to pick two runs to compare.
-- **Compare** says whether the candidate is a real regression, a real improvement or noise,
+- **Compare** says whether the candidate is a real regression, a real improvement or
+  inconclusive, with the largest drop that can't be ruled out. Given a largest acceptable drop,
+  it also says pass, fail or needs more evidence. It
   draws the confidence interval against zero, and lists the cases that dropped or gained the
   most.
 - **Case** opens one case from both runs side by side, with each run's trace: every model call
