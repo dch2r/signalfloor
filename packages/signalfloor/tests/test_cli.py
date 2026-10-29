@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from signalfloor.cli import (
+    EXIT_NEEDS_MORE_EVIDENCE,
     EXIT_OK,
     EXIT_REGRESSION,
     EXIT_TOO_FLAKY,
@@ -45,13 +46,69 @@ def test_regression_exits_with_code_1(
     assert "change      -0.2000  (95% CI" in out
 
 
-def test_no_change_exits_with_code_0(
+def test_inconclusive_exits_with_code_0_and_says_what_it_cannot_rule_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = write_run(tmp_path / "b.jsonl", [0.5] * 8)
+    noisy = write_run(tmp_path / "n.jsonl", [0.8, 0.2] * 4)
+
+    code = main(["compare", base, noisy, "--seed", "0"])
+
+    out = capsys.readouterr().out
+    assert code == EXIT_OK
+    assert "verdict     inconclusive" in out
+    assert "the data can't rule out a drop of up to 0.2" in out
+    assert "set --margin" in out
+
+
+@pytest.mark.parametrize(
+    ("candidate", "margin", "code", "decision"),
+    [
+        ("same", "0.02", EXIT_OK, "pass"),
+        ("better", "0", EXIT_OK, "pass"),
+        ("worse", "0.05", EXIT_REGRESSION, "fail"),
+        # A drop of exactly 0.2 is shown, which a margin of 0.5 allows.
+        ("worse", "0.5", EXIT_OK, "pass"),
+    ],
+)
+def test_margin_decisions(
+    runs: dict[str, str],
+    capsys: pytest.CaptureFixture[str],
+    candidate: str,
+    margin: str,
+    code: int,
+    decision: str,
+) -> None:
+    result = main(["compare", runs["base"], runs[candidate], "--seed", "0", "--margin", margin])
+
+    assert result == code
+    assert f"decision    {decision} (margin {float(margin):g})" in capsys.readouterr().out
+
+
+def test_margin_needs_more_evidence_when_the_interval_straddles_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = write_run(tmp_path / "b.jsonl", [0.5] * 8)
+    noisy = write_run(tmp_path / "n.jsonl", [0.8, 0.2] * 4)
+
+    code = main(["compare", base, noisy, "--seed", "0", "--margin", "0.05"])
+
+    assert code == EXIT_NEEDS_MORE_EVIDENCE
+    assert "decision    needs more evidence (margin 0.05)" in capsys.readouterr().out
+
+
+def test_margin_in_json(runs: dict[str, str], capsys: pytest.CaptureFixture[str]) -> None:
+    main(["compare", runs["base"], runs["same"], "--margin", "0.02", "--format", "json"])
+
+    result = json.loads(capsys.readouterr().out)
+    assert (result["margin"], result["decision"]) == (0.02, "pass")
+
+
+def test_negative_margin_is_a_usage_error(
     runs: dict[str, str], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    code = main(["compare", runs["base"], runs["same"], "--seed", "0"])
-
-    assert code == EXIT_OK
-    assert "verdict     no detectable change" in capsys.readouterr().out
+    assert main(["compare", runs["base"], runs["same"], "--margin", "-0.1"]) == EXIT_USAGE
+    assert "margin must be zero or more" in capsys.readouterr().err
 
 
 def test_improvement_exits_with_code_0(

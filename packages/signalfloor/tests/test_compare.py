@@ -3,20 +3,20 @@ import math
 import numpy as np
 import pytest
 
-from signalfloor.compare import PairingError, Verdict, paired_bootstrap
+from signalfloor.compare import Decision, PairingError, Verdict, paired_bootstrap
 
 
 def run(scores: list[float]) -> dict[str, float]:
     return {f"case-{i:04d}": s for i, s in enumerate(scores)}
 
 
-def test_identical_runs_show_no_change() -> None:
+def test_identical_runs_are_inconclusive() -> None:
     scores = run([0.1, 0.5, 0.9, 0.3, 0.7])
     result = paired_bootstrap(scores, scores, seed=0)
 
     assert result.delta == 0
     assert result.ci_low == result.ci_high == 0
-    assert result.verdict is Verdict.NO_CHANGE
+    assert result.verdict is Verdict.INCONCLUSIVE
 
 
 def test_clear_drop_is_a_regression() -> None:
@@ -50,7 +50,7 @@ def test_small_noisy_change_on_few_cases_is_not_called() -> None:
     result = paired_bootstrap(base, cand, seed=0)
 
     assert result.delta == pytest.approx(-0.05)
-    assert result.verdict is Verdict.NO_CHANGE
+    assert result.verdict is Verdict.INCONCLUSIVE
 
 
 def test_cases_are_paired_by_id_not_by_order() -> None:
@@ -60,7 +60,7 @@ def test_cases_are_paired_by_id_not_by_order() -> None:
     result = paired_bootstrap(base, cand, seed=0)
 
     assert result.delta == 0
-    assert result.verdict is Verdict.NO_CHANGE
+    assert result.verdict is Verdict.INCONCLUSIVE
 
 
 def test_same_seed_gives_same_interval() -> None:
@@ -132,7 +132,7 @@ def test_false_alarm_rate_matches_confidence_level() -> None:
         base = rng.normal(0.7, 0.15, size=n_cases)
         cand = base + rng.normal(0, 0.1, size=n_cases)  # same quality, run-to-run noise only
         result = paired_bootstrap(run(list(base)), run(list(cand)), n_resamples=2_000, seed=t)
-        alarms += result.verdict is not Verdict.NO_CHANGE
+        alarms += result.verdict is not Verdict.INCONCLUSIVE
 
     assert 0.02 <= alarms / trials <= 0.09
 
@@ -153,3 +153,40 @@ def test_pairing_catches_a_drop_that_case_difficulty_would_hide() -> None:
     # intervals for the means overlap heavily.
     half_width = 1.96 * difficulty.std(ddof=1) / math.sqrt(100)
     assert abs(base.mean() - cand.mean()) < half_width
+
+
+def test_inconclusive_reports_the_largest_drop_it_cannot_rule_out() -> None:
+    base = {f"c{i}": 0.5 for i in range(8)}
+    noisy = {f"c{i}": 0.8 if i % 2 else 0.2 for i in range(8)}
+
+    result = paired_bootstrap(base, noisy, seed=0)
+
+    assert result.verdict is Verdict.INCONCLUSIVE
+    assert result.largest_drop_not_ruled_out == pytest.approx(-result.ci_low)
+    assert result.largest_drop_not_ruled_out > 0.1
+    assert result.decision is None
+
+
+def test_largest_drop_is_zero_for_a_proven_improvement() -> None:
+    base = {f"c{i}": 0.5 for i in range(50)}
+    better = {f"c{i}": 0.7 for i in range(50)}
+
+    assert paired_bootstrap(base, better, seed=0).largest_drop_not_ruled_out == 0
+
+
+def test_a_zero_margin_never_passes_an_unproven_change() -> None:
+    # Identical runs: the interval is exactly zero. That shows no drop, so it passes. A noisy
+    # inconclusive result can't, because a drop is still possible.
+    same = {f"c{i}": 0.5 for i in range(20)}
+    noisy = {f"c{i}": 0.6 if i % 2 else 0.4 for i in range(20)}
+
+    assert paired_bootstrap(same, same, seed=0, margin=0).decision is Decision.PASS
+    assert paired_bootstrap(same, noisy, seed=0, margin=0).decision is Decision.NEEDS_MORE_EVIDENCE
+
+
+@pytest.mark.parametrize("margin", [-0.01, float("nan"), float("inf")])
+def test_bad_margins_are_rejected(margin: float) -> None:
+    same = {"a": 1.0, "b": 0.0}
+
+    with pytest.raises(ValueError, match="margin"):
+        paired_bootstrap(same, same, margin=margin)
