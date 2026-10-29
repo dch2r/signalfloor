@@ -12,6 +12,11 @@ All notable changes to this project are listed here. The format follows
   An interval that contains zero means the data can't tell, not that nothing changed. If you
   parse `--format json`, look for `"inconclusive"` instead of `"no_change"`.
 - An inconclusive comparison now says the largest drop the data can't rule out.
+- `flaky` estimates the noise floor from the run means as well as from the cases, and uses the
+  larger. The cases only estimate assumed cases vary independently, so it missed shifts that
+  move a whole run, such as a model or judge change. The run estimate uses a Student t
+  multiplier, so with few runs the band is wider. The output shows both and notes when runs
+  move together or when there are too few runs.
 
 ### Added
 

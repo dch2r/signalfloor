@@ -63,7 +63,8 @@ with a local model. It is used to test signalfloor on real agent output. Two fin
 
 - Hybrid search looked like the obvious choice, but at top 2 it was a real 8 point recall
   regression against dense search alone, and its small win at top 10 was noise.
-- A new prompt raised F1 by about 9 points, well above a measured noise floor of 1.6 points.
+- A new prompt raised F1 by about 9 points, about twice the noise band measured from three
+  identical reruns.
   It also quietly cut retrieval recall by 10 points, which the headline score hid.
 
 The [agent README](packages/agent/README.md) has the numbers and how to rerun them.
@@ -163,25 +164,37 @@ and the command tells you to label more. It exits with code 0 only when the judg
 
 ## Find flaky cases and your noise floor
 
-Run the same eval a few times without changing anything, then pass all the result files:
+Run the same eval a few times without changing anything, then pass all the result files. This
+is the reference agent run three times with nothing changed:
 
 ```console
-$ signalfloor flaky rerun1.jsonl rerun2.jsonl rerun3.jsonl rerun4.jsonl rerun5.jsonl
-runs        5
-cases       300
-run means   0.8367, 0.8400, 0.8367, 0.8233, 0.8267
-noise floor 0.0126
-noise band  +/-0.0246  (95% of reruns stay within this)
-flaky       27 of 300 cases (9.0%)
+$ signalfloor flaky v1-run1.jsonl v1-run2.jsonl v1-run3.jsonl
+runs        3
+cases       100
+run means   0.1550, 0.1437, 0.1422
+noise floor 0.0099
+noise band  +/-0.0425  (95% of reruns stay within this)
+            from cases +/-0.0163, from runs +/-0.0425
+flaky       3 of 100 cases (3.0%)
+note        with 3 runs the estimate from runs is rough. 5 or more make it reliable.
 
-case   spread  scores
-q-037  1.000   0 1 1 0 0
-q-040  1.000   1 1 0 0 1
+case                      spread  scores
+5ae37c765542992f92d822d4  1.000   1 0 0
 ...
 ```
 
-The noise band is the most useful number here. On this suite, any change smaller than about
-2.5 points could come from rerunning the same thing, so do not read anything into it.
+The noise band is the most useful number here: a change smaller than it could come from
+rerunning the same thing. It is estimated two ways and the larger wins:
+
+- **From the cases.** How much each case moves, assuming cases move independently. Precise, but
+  blind to anything that shifts many cases at once, like a model update or a judge change.
+- **From the runs.** How much the run means themselves move. This catches shared shifts, but
+  three runs give only a rough estimate, so its band is wide. More reruns narrow it.
+
+In a simulation where every run shares a random shift, the cases only band held 71% of fresh
+reruns instead of 95%. The combined band held 97%. When cases really are independent the
+combined band is about 1.3 times wider than it needs to be, which is the price of the
+protection.
 
 A case is flaky when its score moves between runs. By default any movement counts, which
 suits pass/fail scores. For continuous scores set `--tolerance`, for example 0.1. The command
