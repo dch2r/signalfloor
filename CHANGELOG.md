@@ -18,8 +18,15 @@ All notable changes to this project are listed here. The format follows
   multiplier, so with few runs the band is wider. The output shows both and notes when runs
   move together or when there are too few runs.
 
+- `calibrate` no longer trusts a judge on thin evidence. Every label the humans used needs at
+  least 5 examples (`--min-per-label`), and the result is inconclusive when more than 5% of
+  resamples leave kappa undefined. Before, two cases in perfect agreement came back trusted.
+  The output lists the reasons.
+
 ### Added
 
+- `calibrate` prints a confusion matrix of judge labels against human labels, and the JSON
+  output includes it with the count of each human label.
 - `compare --margin`: the largest drop you accept. The result gets a decision of pass, fail
   or needs more evidence, kept apart from the verdict. Needs more evidence exits with the new
   code 3, so it fails a CI job.
