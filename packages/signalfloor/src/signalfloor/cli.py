@@ -20,7 +20,7 @@ from signalfloor import __version__
 from signalfloor.calibration import Agreement, Trust, judge_agreement
 from signalfloor.compare import Comparison, Decision, PairingError, Verdict, paired_bootstrap
 from signalfloor.results import ResultsFileError, load_labels, load_scores
-from signalfloor.stability import Stability, find_flaky
+from signalfloor.stability import FEW_RUNS, Stability, find_flaky
 
 EXIT_OK = 0
 EXIT_REGRESSION = 1
@@ -261,8 +261,20 @@ def _format_flaky(r: Stability, top: int) -> str:
         f"run means   {', '.join(f'{m:.4f}' for m in r.run_means)}",
         f"noise floor {r.noise_floor:.4f}",
         f"noise band  +/-{r.noise_band:.4f}  ({level} of reruns stay within this)",
+        f"            from cases +/-{r.noise_band_cases:.4f}, from runs +/-{r.noise_band_runs:.4f}",
         f"flaky       {len(r.flaky)} of {r.n_cases} cases ({r.flaky_rate:.1%})",
     ]
+    # Runs moving together more than independent cases can explain point at something shared.
+    if r.noise_floor_runs > 2 * r.noise_floor_cases:
+        lines.append(
+            "note        whole runs move together more than their cases explain. Something "
+            "shared, like the model, the judge or the infrastructure, changes between runs."
+        )
+    if r.n_runs < FEW_RUNS:
+        lines.append(
+            f"note        with {r.n_runs} runs the estimate from runs is rough. "
+            f"{FEW_RUNS} or more make it reliable."
+        )
     if r.flaky:
         shown = r.flaky[:top]
         width = max(len(f.case_id) for f in shown)

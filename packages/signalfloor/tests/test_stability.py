@@ -64,9 +64,54 @@ def test_noise_floor_formula_on_a_small_example() -> None:
 
     result = find_flaky([a, b])
 
-    expected = math.sqrt(2 * (1 / 6) / 3)
-    assert result.noise_floor == pytest.approx(expected)
-    assert result.noise_band == pytest.approx(1.959964 * expected, rel=1e-5)
+    from_cases = math.sqrt(2 * (1 / 6) / 3)
+    # Run means 2/3 and 1/3: their standard deviation times sqrt(2) is the gap, 1/3.
+    from_runs = 1 / 3
+    assert result.noise_floor_cases == pytest.approx(from_cases)
+    assert result.noise_band_cases == pytest.approx(1.959964 * from_cases, rel=1e-5)
+    assert result.noise_floor_runs == pytest.approx(from_runs)
+    # Two runs leave one degree of freedom, so the t multiplier is 12.706.
+    assert result.noise_band_runs == pytest.approx(12.7062 * from_runs, rel=1e-4)
+    assert result.noise_floor == pytest.approx(max(from_cases, from_runs))
+    assert result.noise_band == pytest.approx(result.noise_band_runs)
+
+
+def test_runs_that_move_together_widen_the_band() -> None:
+    # The review's example: 100 cases that all flip together across four runs. Treating the
+    # cases as independent gave a band of 0.16 while the run means swing between 0 and 1.
+    runs = [run([float(r % 2)] * 100) for r in range(4)]
+
+    result = find_flaky(runs)
+
+    assert result.noise_band_cases == pytest.approx(0.16, abs=0.01)
+    assert result.noise_floor_runs == pytest.approx(math.sqrt(2) * np.std([0, 1, 0, 1], ddof=1))
+    assert result.noise_band > 1
+
+
+def test_band_covers_reruns_when_runs_share_a_shift() -> None:
+    # Each run adds the same random shift to every case's pass rate, the way a model or judge
+    # change between runs would. Estimate the band from 5 runs, then check how often a fresh
+    # pair of runs stays inside it. A 95% band should hold about 95% of the time.
+    rng = np.random.default_rng(7)
+    n_cases, trials = 200, 300
+    base = rng.uniform(0.2, 0.8, n_cases)
+
+    def one_run() -> dict[str, float]:
+        p = np.clip(base + rng.normal(0, 0.05), 0, 1)
+        return run(list((rng.random(n_cases) < p).astype(float)))
+
+    held_combined = held_cases_only = 0
+    for _ in range(trials):
+        result = find_flaky([one_run() for _ in range(5)])
+        a, b = one_run(), one_run()
+        gap = abs(np.mean(list(a.values())) - np.mean(list(b.values())))
+        held_combined += int(gap <= result.noise_band)
+        held_cases_only += int(gap <= result.noise_band_cases)
+
+    # Measured: 97% for the combined band, 71% for the cases only band. The cases only band
+    # badly undercovers, which is the bug the run estimate fixes.
+    assert held_combined / trials >= 0.9
+    assert held_cases_only / trials < 0.8
 
 
 def test_noise_floor_matches_how_much_identical_runs_really_move() -> None:
@@ -114,3 +159,26 @@ def test_rejects_bad_options(kwargs: dict[str, float], message: str) -> None:
 def test_needs_two_runs() -> None:
     with pytest.raises(ValueError, match="at least 2 runs"):
         find_flaky([run([1.0, 0.0])])
+
+
+def test_independent_cases_still_get_a_band_that_covers() -> None:
+    # Without a shared shift the cases estimate is right on its own. The combined band is
+    # wider, about 1.3 times in this setup, which is the cost of guarding against shared shifts
+    # with only 5 runs. It must still cover, and not by an absurd margin.
+    rng = np.random.default_rng(3)
+    n_cases, trials = 200, 300
+    base = rng.uniform(0.2, 0.8, n_cases)
+
+    def one_run() -> dict[str, float]:
+        return run(list((rng.random(n_cases) < base).astype(float)))
+
+    held = 0
+    widths = []
+    for _ in range(trials):
+        result = find_flaky([one_run() for _ in range(5)])
+        a, b = one_run(), one_run()
+        held += int(abs(np.mean(list(a.values())) - np.mean(list(b.values()))) <= result.noise_band)
+        widths.append(result.noise_band / result.noise_band_cases)
+
+    assert held / trials >= 0.93
+    assert float(np.median(widths)) < 2
