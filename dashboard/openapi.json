@@ -890,6 +890,14 @@
             "type": "number",
             "title": "Largest Drop Not Ruled Out"
           },
+          "unseen_share": {
+            "type": "number",
+            "title": "Unseen Share"
+          },
+          "max_case_drop": {
+            "type": "number",
+            "title": "Max Case Drop"
+          },
           "margin": {
             "anyOf": [
               {
@@ -911,6 +919,17 @@
               }
             ],
             "title": "Decision"
+          },
+          "cases_needed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cases Needed"
           }
         },
         "type": "object",
@@ -926,7 +945,9 @@
           "n_cases",
           "n_resamples",
           "verdict",
-          "largest_drop_not_ruled_out"
+          "largest_drop_not_ruled_out",
+          "unseen_share",
+          "max_case_drop"
         ],
         "title": "ComparisonOut"
       },

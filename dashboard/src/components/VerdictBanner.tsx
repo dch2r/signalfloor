@@ -1,5 +1,5 @@
 import type { Comparison } from "@/lib/api";
-import { formatDelta, formatScore } from "@/lib/format";
+import { formatDelta, formatPercent, formatScore } from "@/lib/format";
 import { axisExtent, toPercent } from "@/lib/interval";
 
 // The interval comes from resampling the eval's cases. It shows how much the result depends on
@@ -68,6 +68,16 @@ export function VerdictBanner({ comparison }: { comparison: Comparison }) {
         </p>
       )}
       {decision && <p className="mt-1 text-sm">{decision.text(margin)}</p>}
+      {comparison.decision === "needs_more_evidence" &&
+        comparison.cases_needed != null &&
+        comparison.n_cases < comparison.cases_needed && (
+          <p data-testid="cases-needed" className="mt-1 text-sm">
+            A margin of {margin} needs at least{" "}
+            <strong className="font-mono">{comparison.cases_needed}</strong> cases, even when nothing
+            changed. With {comparison.n_cases}, a change that broke{" "}
+            {formatPercent(comparison.unseen_share)} of cases could miss every one of them.
+          </p>
+        )}
 
       <dl className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <Stat label="Baseline mean" value={formatScore(comparison.baseline_mean)} />

@@ -357,7 +357,26 @@ def test_compare_with_a_margin(
 
     assert result["decision"] == decision
     assert result["margin"] == margin
-    assert result["largest_drop_not_ruled_out"] == pytest.approx(-result["ci_low"])
+    p = result["unseen_share"]
+    assert p == pytest.approx(1 - 0.025 ** (1 / 100))
+    assert result["max_case_drop"] == 1
+    expected = -(1 - p) * result["ci_low"] + p
+    assert result["largest_drop_not_ruled_out"] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(("margin", "needed"), [(None, None), (0, None), (0.02, 183), (0.05, 72)])
+def test_compare_says_how_many_cases_a_margin_needs(
+    client: TestClient, margin: float | None, needed: int | None
+) -> None:
+    run_id = upload(client, "same", [1.0, 0.0] * 10)["id"]
+    params: dict[str, float] = {"seed": 0} if margin is None else {"seed": 0, "margin": margin}
+
+    result = client.get(f"/runs/{run_id}/compare/{run_id}", params=params).json()
+
+    assert result["cases_needed"] == needed
+    # 20 identical cases still can't pass 0.02: a drop of 0.17 could hide in what wasn't drawn.
+    if margin == 0.02:
+        assert result["decision"] == "needs_more_evidence"
 
 
 def test_inconclusive_compare(client: TestClient) -> None:

@@ -64,11 +64,17 @@ class ComparisonOut(BaseModel):
     # regression, improvement or inconclusive. Inconclusive means the interval contains zero,
     # not that nothing changed.
     verdict: str
-    # The drop the data can't rule out: zero when the interval sits above zero.
+    # The drop the data can't rule out, counting cases the eval may have missed.
     largest_drop_not_ruled_out: float
-    # Only with a margin: pass, fail or needs_more_evidence.
+    # The share of all cases that could have broken without one showing up in this eval, and
+    # how far one case's score can drop.
+    unseen_share: float
+    max_case_drop: float
+    # Only with a margin: pass, fail or needs_more_evidence, and the fewest cases that can pass
+    # that margin when nothing changed. Null for a margin of zero, which no count can pass.
     margin: float | None = None
     decision: str | None = None
+    cases_needed: int | None = None
 
 
 class SpanOut(BaseModel):

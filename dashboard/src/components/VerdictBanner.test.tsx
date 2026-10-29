@@ -19,7 +19,9 @@ function comparison(overrides: Partial<Comparison>): Comparison {
     n_cases: 100,
     n_resamples: 10000,
     verdict: "improvement",
-    largest_drop_not_ruled_out: 0,
+    largest_drop_not_ruled_out: 0.025,
+    unseen_share: 0.036,
+    max_case_drop: 1,
     ...overrides,
   };
 }
@@ -103,5 +105,32 @@ describe("VerdictBanner wording", () => {
 
     expect(screen.getByTestId("decision").textContent).toBe(label);
     expect(screen.getByText(new RegExp(text.replace(/[.']/g, ".")))).toBeTruthy();
+  });
+
+  it("says how many cases a margin needs when there are too few", () => {
+    render(
+      <VerdictBanner
+        comparison={comparison({ margin: 0.02, decision: "needs_more_evidence", cases_needed: 183 })}
+      />,
+    );
+
+    expect(screen.getByTestId("cases-needed").textContent).toBe(
+      "A margin of 0.020 needs at least 183 cases, even when nothing changed. " +
+        "With 100, a change that broke 3.6% of cases could miss every one of them.",
+    );
+  });
+
+  it.each([
+    ["the eval already has enough cases", { cases_needed: 72 }],
+    ["the margin is zero", { cases_needed: null }],
+    ["the decision is not about evidence", { decision: "pass", cases_needed: 183 }],
+  ])("says nothing about case counts when %s", (_, overrides) => {
+    render(
+      <VerdictBanner
+        comparison={comparison({ margin: 0.05, decision: "needs_more_evidence", ...overrides })}
+      />,
+    );
+
+    expect(screen.queryByTestId("cases-needed")).toBeNull();
   });
 });
