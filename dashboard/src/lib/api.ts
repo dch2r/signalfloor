@@ -15,8 +15,17 @@ export const API_URL = process.env.SIGNALFLOOR_API_URL ?? "http://127.0.0.1:8000
 
 export type Result<T> = { ok: true; data: T } | { ok: false; message: string };
 
-export function createApi(baseUrl: string = API_URL, fetchImpl: typeof fetch = fetch) {
-  const client = createClient<paths>({ baseUrl, fetch: fetchImpl });
+export function createApi(
+  baseUrl: string = API_URL,
+  fetchImpl: typeof fetch = fetch,
+  // Read on the server only. This module is server-only, so the key never reaches a browser.
+  apiKey: string | undefined = process.env.SIGNALFLOOR_API_KEY,
+) {
+  const client = createClient<paths>({
+    baseUrl,
+    fetch: fetchImpl,
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+  });
 
   // Errors are returned, not thrown. In production Next.js hides the message of an error thrown
   // in a server component, and "the API is down" is something the user needs to read.
