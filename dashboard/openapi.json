@@ -406,6 +406,30 @@
               "title": "Margin"
             },
             "description": "The largest drop you accept. Adds a pass or fail decision."
+          },
+          {
+            "name": "score_low",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "The lowest score the metric can give.",
+              "default": 0.0,
+              "title": "Score Low"
+            },
+            "description": "The lowest score the metric can give."
+          },
+          {
+            "name": "score_high",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "The highest score the metric can give.",
+              "default": 1.0,
+              "title": "Score High"
+            },
+            "description": "The highest score the metric can give."
           }
         ],
         "responses": {
@@ -829,6 +853,16 @@
               }
             ],
             "title": "Margin"
+          },
+          "score_low": {
+            "type": "number",
+            "title": "Score Low",
+            "default": 0.0
+          },
+          "score_high": {
+            "type": "number",
+            "title": "Score High",
+            "default": 1.0
           }
         },
         "type": "object",
@@ -886,6 +920,14 @@
             "type": "string",
             "title": "Verdict"
           },
+          "bound_low": {
+            "type": "number",
+            "title": "Bound Low"
+          },
+          "bound_high": {
+            "type": "number",
+            "title": "Bound High"
+          },
           "largest_drop_not_ruled_out": {
             "type": "number",
             "title": "Largest Drop Not Ruled Out"
@@ -897,6 +939,18 @@
           "max_case_drop": {
             "type": "number",
             "title": "Max Case Drop"
+          },
+          "missing_cases": {
+            "type": "integer",
+            "title": "Missing Cases"
+          },
+          "min_diff": {
+            "type": "number",
+            "title": "Min Diff"
+          },
+          "max_diff": {
+            "type": "number",
+            "title": "Max Diff"
           },
           "margin": {
             "anyOf": [
@@ -945,9 +999,14 @@
           "n_cases",
           "n_resamples",
           "verdict",
+          "bound_low",
+          "bound_high",
           "largest_drop_not_ruled_out",
           "unseen_share",
-          "max_case_drop"
+          "max_case_drop",
+          "missing_cases",
+          "min_diff",
+          "max_diff"
         ],
         "title": "ComparisonOut"
       },

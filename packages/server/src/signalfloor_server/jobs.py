@@ -57,6 +57,7 @@ async def _compare(session: AsyncSession, payload: dict[str, Any]) -> dict[str, 
             # Jobs queued before this option existed don't have it.
             shared_only=payload.get("shared_only", False),
             margin=payload.get("margin"),
+            score_range=(payload.get("score_low", 0.0), payload.get("score_high", 1.0)),
         )
     except (RunNotFound, ValueError) as e:
         raise PermanentError(str(e)) from e

@@ -78,34 +78,45 @@ Save each eval run as a JSON Lines file with one test case per line:
 {"id": "q-002", "score": true}
 ```
 
-Scores can be numbers or true/false. Then compare the two runs:
+Scores can be numbers between 0 and 1 or true/false. For another scale, such as a judge that
+scores 1 to 5, add `--score-range 1 5`. signalfloor needs to know how far a score can move,
+and it never guesses that from the scores it sees. Then compare the two runs:
 
 ```console
-$ signalfloor compare baseline.jsonl candidate.jsonl
-cases       300
-baseline    0.8033
-candidate   0.7000
-change      -0.1033  (95% CI -0.1400 to -0.0700)
+$ signalfloor compare examples/baseline.jsonl examples/candidate-worse.jsonl
+cases       120
+baseline    0.7500
+candidate   0.5833
+change      -0.1667  (95% CI -0.2750 to -0.0583)
+bounds      -0.2750 to -0.0583  (the interval widened for cases the eval may have missed)
 
 verdict     regression
 ```
 
-The verdict is `regression`, `improvement` or `inconclusive`. Inconclusive means the
-interval contains zero. It does not mean nothing changed: a small eval can be inconclusive about
-a large drop, so the command says how large a drop it can't rule out:
+The interval comes from a paired bootstrap. The bounds widen it for cases the eval may have
+missed, and the verdict comes from the bounds. A bootstrap only knows the differences it was
+given. If a change broke 4 of 100 questions, a 20 question eval misses all of them 44% of
+the time, every difference is zero, and the interval is [0, 0]. If an eval of 2 cases saw two
+losses, the interval is [-1, -1]. So when an eval of n cases has not seen the lowest or the
+highest possible difference, the bounds allow for a share of about 3.7 / n of all cases
+being out there (the rule of three). When it has seen both, as above, the bounds are the
+interval.
+
+The verdict is `regression`, `improvement` or `inconclusive`. Inconclusive means the bounds
+contain zero. It does not mean nothing changed: a small eval can be inconclusive about a large
+drop, so the command says how large a drop it can't rule out:
 
 ```console
 $ signalfloor compare v1.jsonl v2.jsonl
 cases       20
 change      +0.0039  (95% CI -0.1306 to +0.1513)
+bounds      -0.1681 to +0.1513  (the interval widened for cases the eval may have missed)
 
 verdict     inconclusive
-            the data can't rule out a drop of up to 0.2771
+            the data can't rule out a drop of up to 0.1681
 ```
 
-That is a 20 question eval, and a drop of 28 points could hide in it. That number is more than
-the interval's -0.13, because it also counts the cases the eval never drew. If a change broke
-17% of all questions, a 20 question eval would miss every one of them 2.5% of the time.
+That is a 20 question eval, and a drop of 17 points could hide in it.
 
 ### Gate a release on a margin
 
@@ -114,8 +125,8 @@ kept apart from the verdict:
 
 | Decision | When | Exit code |
 |---|---|---|
-| pass | the largest drop not ruled out is within the margin | 0 |
-| fail | the whole interval is below `-margin`, so the drop is larger | 1 |
+| pass | the lower bound is at or above `-margin`, so any drop is within it | 0 |
+| fail | the upper bound is below `-margin`, so the drop is larger | 1 |
 | needs more evidence | anything else: the data can't tell | 3 |
 
 ```console

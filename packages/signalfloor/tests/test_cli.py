@@ -57,7 +57,7 @@ def test_inconclusive_exits_with_code_0_and_says_what_it_cannot_rule_out(
     out = capsys.readouterr().out
     assert code == EXIT_OK
     assert "verdict     inconclusive" in out
-    assert "the data can't rule out a drop of up to 0.5113" in out
+    assert "the data can't rule out a drop of up to 0.4836" in out
     assert "set --margin" in out
 
 
@@ -437,3 +437,30 @@ def test_calibrate_min_per_label_option(tmp_path: Path, capsys: pytest.CaptureFi
         main(["calibrate", str(labels), str(labels), "--seed", "0", "--min-per-label", "4"])
         == EXIT_OK
     )
+
+
+def test_scores_outside_0_to_1_need_a_score_range(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = write_run(tmp_path / "b.jsonl", [4.0, 3.0, 5.0, 2.0] * 10)
+    cand = write_run(tmp_path / "c.jsonl", [3.0, 3.0, 5.0, 2.0] * 10)
+
+    assert main(["compare", base, cand]) == EXIT_USAGE
+    assert "outside the score range 0 to 1" in capsys.readouterr().err
+
+    assert main(["compare", base, cand, "--seed", "0", "--score-range", "1", "5"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "change      -0.2500" in out
+    assert "verdict     inconclusive" in out
+
+
+def test_shows_the_bounds_and_puts_them_in_json(
+    runs: dict[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["compare", runs["base"], runs["worse"], "--seed", "0"])
+    assert "bounds      -0.2" in capsys.readouterr().out
+
+    main(["compare", runs["base"], runs["worse"], "--seed", "0", "--format", "json"])
+    result = json.loads(capsys.readouterr().out)
+    assert result["bound_low"] < result["ci_low"] <= result["ci_high"] < result["bound_high"] < 0
+    assert result["largest_drop_not_ruled_out"] == pytest.approx(-result["bound_low"])

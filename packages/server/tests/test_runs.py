@@ -158,7 +158,7 @@ def test_compare_matches_the_library(client: TestClient) -> None:
     from signalfloor.compare import paired_bootstrap
 
     base_scores = [0.1 * (i % 10) for i in range(40)]
-    cand_scores = [min(1.0, s + 0.05 * (i % 3 - 1)) for i, s in enumerate(base_scores)]
+    cand_scores = [min(1.0, max(0.0, s + 0.05 * (i % 3 - 1))) for i, s in enumerate(base_scores)]
     baseline = upload(client, "base", base_scores)["id"]
     candidate = upload(client, "cand", cand_scores)["id"]
 
@@ -323,8 +323,39 @@ def test_compare_only_the_shared_cases(client: TestClient) -> None:
     assert shared.status_code == 200
     result = shared.json()
     assert result["n_cases"] == 3
+    assert result["missing_cases"] == 2
     assert result["baseline_mean"] == pytest.approx(2 / 3)
     assert result["candidate_mean"] == 1.0
+
+
+def test_a_candidate_cannot_pass_by_leaving_out_cases(client: TestClient) -> None:
+    # The review that found this: 200 cases pass in the baseline, the candidate has 190 of
+    # them, all passing. If it crashed on the other 10, that is a 0.05 drop.
+    baseline = upload(client, "full", [1.0] * 200)["id"]
+    candidate = upload(client, "crashed", [1.0] * 190)["id"]
+    url = f"/runs/{baseline}/compare/{candidate}"
+
+    tight = client.get(url, params={"shared_only": True, "seed": 0, "margin": 0.02}).json()
+    loose = client.get(url, params={"shared_only": True, "seed": 0, "margin": 0.1}).json()
+
+    assert tight["missing_cases"] == 10
+    assert tight["decision"] == "needs_more_evidence"
+    assert tight["largest_drop_not_ruled_out"] > 0.05
+    assert loose["decision"] == "pass"
+
+
+def test_compare_takes_the_score_range(client: TestClient) -> None:
+    baseline = upload(client, "base", [4.0, 2.0, 5.0, 3.0] * 10)["id"]
+    candidate = upload(client, "cand", [3.0, 2.0, 5.0, 3.0] * 10)["id"]
+    url = f"/runs/{baseline}/compare/{candidate}"
+
+    refused = client.get(url)
+    ranged = client.get(url, params={"seed": 0, "score_low": 1, "score_high": 5})
+
+    assert refused.status_code == 422
+    assert "outside the score range 0 to 1" in refused.json()["detail"]
+    assert ranged.status_code == 200
+    assert ranged.json()["max_case_drop"] == 4
 
 
 def test_shared_only_still_needs_enough_shared_cases(client: TestClient) -> None:
@@ -360,8 +391,10 @@ def test_compare_with_a_margin(
     p = result["unseen_share"]
     assert p == pytest.approx(1 - 0.025 ** (1 / 100))
     assert result["max_case_drop"] == 1
-    expected = -(1 - p) * result["ci_low"] + p
-    assert result["largest_drop_not_ruled_out"] == pytest.approx(expected)
+    gap_low, gap_high = result["min_diff"] + 1, 1 - result["max_diff"]
+    assert result["bound_low"] == pytest.approx(result["ci_low"] - p * gap_low)
+    assert result["bound_high"] == pytest.approx(result["ci_high"] + p * gap_high)
+    assert result["largest_drop_not_ruled_out"] == pytest.approx(-result["bound_low"])
 
 
 @pytest.mark.parametrize(("margin", "needed"), [(None, None), (0, None), (0.02, 183), (0.05, 72)])

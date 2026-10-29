@@ -20,16 +20,22 @@ function comparison(overrides: Partial<Comparison>): Comparison {
     n_resamples: 10000,
     verdict: "improvement",
     largest_drop_not_ruled_out: 0.025,
+    // Made up so the verdict holds. With the real bounds this comparison is inconclusive.
+    bound_low: 0.004,
+    bound_high: 0.190,
     unseen_share: 0.036,
     max_case_drop: 1,
+    missing_cases: 0,
+    min_diff: -1,
+    max_diff: 1,
     ...overrides,
   };
 }
 
 describe("VerdictBanner", () => {
   it.each([
-    ["regression", "Real regression"],
-    ["improvement", "Real improvement"],
+    ["regression", "Regression"],
+    ["improvement", "Improvement"],
     ["inconclusive", "Inconclusive"],
     ["something_new", "Inconclusive"],
   ])("shows %s as %s", (verdict, title) => {
@@ -93,12 +99,43 @@ describe("VerdictBanner wording", () => {
     const { container } = render(<VerdictBanner comparison={comparison({ verdict: "regression" })} />);
 
     expect(container.textContent).not.toContain("between runs");
-    expect(container.textContent).toContain("which cases happen to be in the eval set");
+    expect(container.textContent).toContain("cases the eval may have missed");
+  });
+
+  it("speaks of likelihood, not proof", () => {
+    for (const verdict of ["regression", "improvement"]) {
+      const { container, unmount } = render(<VerdictBanner comparison={comparison({ verdict })} />);
+
+      expect(container.textContent).toContain("likely");
+      expect(container.textContent).not.toMatch(/proven|too large to come from/);
+      unmount();
+    }
+  });
+
+  it("shows the bounds the verdict comes from", () => {
+    render(<VerdictBanner comparison={comparison({})} />);
+
+    expect(screen.getByTestId("bounds").textContent).toBe("+0.004 to +0.190");
   });
 
   it.each([
-    ["pass", "Pass", "Any drop is shown to be no larger than 0.020."],
-    ["fail", "Fail", "The drop is shown to be larger than 0.020."],
+    [1, "1 case is in only one run."],
+    [10, "10 cases are in only one run."],
+  ])("explains %i missing cases", (missing, text) => {
+    render(<VerdictBanner comparison={comparison({ missing_cases: missing })} />);
+
+    expect(screen.getByTestId("missing-cases").textContent).toContain(text);
+  });
+
+  it("says nothing about missing cases when there are none", () => {
+    render(<VerdictBanner comparison={comparison({})} />);
+
+    expect(screen.queryByTestId("missing-cases")).toBeNull();
+  });
+
+  it.each([
+    ["pass", "Pass", "The bounds rule out a drop larger than 0.020."],
+    ["fail", "Fail", "The bounds put the drop above 0.020."],
     ["needs_more_evidence", "Needs more evidence", "The data can't tell if the drop is within 0.020."],
   ])("shows the %s decision", (decision, label, text) => {
     render(<VerdictBanner comparison={comparison({ margin: 0.02, decision })} />);
