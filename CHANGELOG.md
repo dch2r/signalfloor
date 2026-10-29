@@ -29,7 +29,15 @@ All notable changes to this project are listed here. The format follows
   output includes it with the count of each human label.
 - `compare --margin`: the largest drop you accept. The result gets a decision of pass, fail
   or needs more evidence, kept apart from the verdict. Needs more evidence exits with the new
-  code 3, so it fails a CI job.
+  code 3, so it fails a CI job. Passing needs enough cases as well as a narrow interval: the
+  largest drop not ruled out also counts cases the eval may have missed (the rule of three),
+  and the output says how many cases the margin needs. Without this, a 20 case eval that drew
+  none of the broken questions passed a real 3 point regression 30% of the time. See
+  `studies/validation`.
+- `cases_needed(margin)` in the library. `unseen_share` and `max_case_drop` in the JSON
+  output and the API, and `cases_needed` in the API.
+- A validation study in `studies/validation` that plants regressions into real agent results
+  and compares signalfloor with a plain threshold on the mean.
 
 ## [0.2.0] - 2026-10-28
 
