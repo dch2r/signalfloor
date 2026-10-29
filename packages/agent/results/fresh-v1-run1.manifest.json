@@ -1,0 +1,23 @@
+{
+  "manifest_version": 1,
+  "identity": {
+    "prompt": "v1",
+    "prompt_sha256": "f9f04846d5f7cc57436a6b929478f2d3f69c884c365059f3946639f2c5e535bf",
+    "model": "qwen3:1.7b",
+    "base_url": "http://localhost:11434/v1",
+    "retriever": "dense",
+    "embedding_model": "nomic-embed-text",
+    "max_searches": 4,
+    "passages_per_search": 4,
+    "dataset": "hotpotqa/hotpot_qa distractor validation",
+    "offset": 100,
+    "corpus_questions": 200,
+    "corpus_sha256": "100e0c81afe1041626c82f92aacf9e29932260abda731385d0779407307c6ebf",
+    "code_sha256": "610f0d7c014c0956b5bebf23e8dce5efbf20fe2a19a8a6c2302fb774c05dd81b"
+  },
+  "info": {
+    "created_at": "2026-10-29T21:59:39.919130+00:00",
+    "git_commit": "30cf92cc99cc1fdca6cee61d6c6b454467bd7495",
+    "model_digest": "8f68893c685c3ddff2aa3fffce2aa60a30bb2da65ca488b61fff134a4d1730e7"
+  }
+}

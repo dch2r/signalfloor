@@ -28,6 +28,9 @@ All notable changes to this project are listed here. The format follows
 - `bound_low`, `bound_high`, `min_diff`, `max_diff` and `missing_cases` on comparisons, in the
   library, the JSON output and the API. The JSON output now also has
   `largest_drop_not_ruled_out`, which 0.3.0 left out.
+- The validation study now reports approval, false failure, needs more evidence and unsafe
+  approval side by side, for three kinds of damage and two margins, and checks the result on
+  100 held-out questions from two new agent runs.
 
 ### Fixed
 
