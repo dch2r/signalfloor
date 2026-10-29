@@ -86,7 +86,7 @@ def test_reports_means_and_sizes() -> None:
 def test_large_suite_is_processed_in_chunks() -> None:
     # 5,000 resamples x 3,000 cases would be 15M values if done at once.
     rng = np.random.default_rng(4)
-    base = rng.random(3_000)
+    base = rng.uniform(0.01, 1, size=3_000)
     result = paired_bootstrap(run(list(base)), run(list(base - 0.01)), n_resamples=5_000, seed=0)
 
     assert result.verdict is Verdict.REGRESSION
@@ -122,36 +122,40 @@ def test_rejects_non_positive_resamples() -> None:
         paired_bootstrap(run([0.0, 1.0]), run([0.0, 1.0]), n_resamples=0)
 
 
-def test_false_alarm_rate_matches_confidence_level() -> None:
-    # When nothing really changed, a 95% interval should exclude zero about 5% of the time.
-    # 400 trials gives a standard error of about 1.1 points, so 2% to 9% is a safe band.
+def test_false_alarms_stay_within_the_confidence_level() -> None:
+    # When nothing really changed, a 95% interval should exclude zero at most 5% of the time.
+    # The bootstrap interval alone is close to that. The bounds are wider, so they alarm less.
     rng = np.random.default_rng(5)
     trials, n_cases = 400, 100
-    alarms = 0
+    interval_alarms = bound_alarms = 0
     for t in range(trials):
-        base = rng.normal(0.7, 0.15, size=n_cases)
-        cand = base + rng.normal(0, 0.1, size=n_cases)  # same quality, run-to-run noise only
+        base = np.clip(rng.normal(0.7, 0.15, size=n_cases), 0, 1)
+        cand = np.clip(base + rng.normal(0, 0.1, size=n_cases), 0, 1)  # run-to-run noise only
         result = paired_bootstrap(run(list(base)), run(list(cand)), n_resamples=2_000, seed=t)
-        alarms += result.verdict is not Verdict.INCONCLUSIVE
+        interval_alarms += not result.ci_low <= 0 <= result.ci_high
+        bound_alarms += result.verdict is not Verdict.INCONCLUSIVE
 
-    assert 0.02 <= alarms / trials <= 0.09
+    assert 0.02 <= interval_alarms / trials <= 0.09
+    assert bound_alarms / trials <= interval_alarms / trials
 
 
 def test_pairing_catches_a_drop_that_case_difficulty_would_hide() -> None:
     # Cases range from very easy to very hard, so raw scores vary a lot between cases.
     # The candidate is a little worse on every case. Comparing the two averages on their own
     # would drown that in the spread between cases, but paired differences remove it.
+    # 300 cases, because the bounds can't call any change smaller than about 3.7 / n.
     rng = np.random.default_rng(6)
-    difficulty = rng.uniform(0.0, 1.0, size=100)
-    base = difficulty + rng.normal(0, 0.01, size=100)
-    cand = difficulty - 0.02 + rng.normal(0, 0.01, size=100)
+    n = 300
+    difficulty = rng.uniform(0.05, 0.95, size=n)
+    base = difficulty + rng.normal(0, 0.01, size=n)
+    cand = difficulty - 0.02 + rng.normal(0, 0.01, size=n)
 
     result = paired_bootstrap(run(list(base)), run(list(cand)), seed=0)
     assert result.verdict is Verdict.REGRESSION
 
     # Sanity check that an unpaired view really could not tell: the two separate 95%
     # intervals for the means overlap heavily.
-    half_width = 1.96 * difficulty.std(ddof=1) / math.sqrt(100)
+    half_width = 1.96 * difficulty.std(ddof=1) / math.sqrt(n)
     assert abs(base.mean() - cand.mean()) < half_width
 
 
@@ -162,10 +166,12 @@ def test_inconclusive_reports_the_largest_drop_it_cannot_rule_out() -> None:
     result = paired_bootstrap(base, noisy, seed=0)
 
     assert result.verdict is Verdict.INCONCLUSIVE
-    # Eight cases could also miss a change that broke over a third of all cases.
+    # Eight cases could miss a change to over a third of all cases. The lowest difference
+    # seen is -0.3, so those cases could each have fallen 0.7 further.
     unseen = result.unseen_share
     assert unseen == pytest.approx(1 - 0.025 ** (1 / 8))
-    expected = -(1 - unseen) * result.ci_low + unseen
+    assert result.min_diff == pytest.approx(-0.3)
+    expected = -(result.ci_low - unseen * 0.7)
     assert result.largest_drop_not_ruled_out == pytest.approx(expected)
     assert result.largest_drop_not_ruled_out > -result.ci_low
     assert result.decision is None
@@ -233,13 +239,97 @@ def test_no_number_of_cases_passes_a_zero_margin() -> None:
         cases_needed(0)
 
 
-def test_scores_outside_0_to_1_use_the_range_seen() -> None:
-    base = {f"c{i}": float(i) for i in range(50)}
+@pytest.mark.parametrize("shift", [0.0, 100.0, -7.5])
+@pytest.mark.parametrize("scale", [1.0, 10.0])
+def test_moving_or_stretching_the_scale_does_not_change_the_answer(
+    shift: float, scale: float
+) -> None:
+    # The review that found this: scores of 100.5 used to pass where 0.5 did not, because
+    # the score range was guessed from the scores seen.
+    rng = np.random.default_rng(9)
+    base = rng.uniform(0, 1, size=60)
+    cand = np.clip(base - rng.choice([0.0, 0.3], size=60, p=[0.8, 0.2]), 0, 1)
 
-    result = paired_bootstrap(base, base, seed=0)
+    def decide(b: np.ndarray, c: np.ndarray, **kwargs: object) -> tuple[object, ...]:
+        r = paired_bootstrap(run(list(b)), run(list(c)), seed=0, **kwargs)  # type: ignore[arg-type]
+        return r.verdict, r.decision, round(r.largest_drop_not_ruled_out / (r.max_case_drop), 9)
 
-    assert result.max_case_drop == 49
-    assert paired_bootstrap({"a": 0.2, "b": 0.9}, {"a": 0.2, "b": 0.9}).max_case_drop == 1
+    plain = decide(base, cand, margin=0.05)
+    moved = decide(
+        base * scale + shift,
+        cand * scale + shift,
+        margin=0.05 * scale,
+        score_range=(shift, shift + scale),
+    )
+    assert moved == plain
+
+
+def test_constant_scores_far_from_zero_do_not_pass() -> None:
+    same = {"a": 100.5, "b": 100.5}
+
+    result = paired_bootstrap(same, same, seed=0, margin=0, score_range=(0, 200))
+
+    assert result.decision is Decision.NEEDS_MORE_EVIDENCE
+
+
+def test_scores_outside_the_range_are_refused() -> None:
+    with pytest.raises(ValueError, match=r"candidate has scores outside the score range 0 to 1"):
+        paired_bootstrap({"a": 0.5, "b": 0.5}, {"a": 0.5, "b": 4.0})
+    assert paired_bootstrap({"a": 4.0, "b": 2.0}, {"a": 3.0, "b": 2.0}, score_range=(1, 5))
+
+
+@pytest.mark.parametrize("bad", [(1.0, 1.0), (1.0, 0.0), (0.0, math.inf), (math.nan, 1.0)])
+def test_bad_score_ranges_are_refused(bad: tuple[float, float]) -> None:
+    with pytest.raises(ValueError, match="score range"):
+        paired_bootstrap({"a": 0.5, "b": 0.5}, {"a": 0.5, "b": 0.5}, score_range=bad)
+
+
+def test_two_losses_from_an_even_population_are_not_a_regression() -> None:
+    # The review that found this: half the cases go 1 -> 0, half go 0 -> 1, so nothing
+    # changed on average. Two cases drawn are both losses a quarter of the time, and the
+    # interval was [-1, -1], a regression and a fail.
+    result = paired_bootstrap({"a": 1, "b": 1}, {"a": 0, "b": 0}, seed=0, margin=0.02)
+
+    assert (result.ci_low, result.ci_high) == (-1, -1)
+    assert result.verdict is Verdict.INCONCLUSIVE
+    assert result.decision is Decision.NEEDS_MORE_EVIDENCE
+
+
+@pytest.mark.parametrize("n", [2, 5, 10, 20])
+def test_false_failures_on_an_even_population_stay_rare(n: int) -> None:
+    # A one-sided 95% bound should be wrong at most 2.5% of the time. 400 trials leave about
+    # a point of sampling noise, so allow 3.5%. Before the bounds, two cases failed 25%.
+    rng = np.random.default_rng(n)
+    trials = 400
+    fails = 0
+    for t in range(trials):
+        won = rng.integers(0, 2, size=n).astype(float)
+        result = paired_bootstrap(
+            run(list(won)), run(list(1 - won)), seed=t, n_resamples=1_000, margin=0.02
+        )
+        fails += result.decision is Decision.FAIL or result.verdict is Verdict.REGRESSION
+
+    assert fails / trials <= 0.035
+
+
+def test_missing_cases_count_as_anything_they_could_have_been() -> None:
+    # 190 cases match and 10 of a 200 case suite are missing from the candidate. If it
+    # crashed on them, the drop is 0.05. The shared cases alone would pass 0.02.
+    same = {f"c{i}": 1.0 for i in range(190)}
+
+    strict = paired_bootstrap(same, same, seed=0, margin=0.02, missing_cases=10)
+    loose = paired_bootstrap(same, same, seed=0, margin=0.1, missing_cases=10)
+
+    assert strict.decision is Decision.NEEDS_MORE_EVIDENCE
+    assert strict.largest_drop_not_ruled_out > 0.05
+    assert loose.decision is Decision.PASS
+    with pytest.raises(ValueError, match="missing_cases"):
+        paired_bootstrap(same, same, missing_cases=-1)
+
+
+def test_tiny_margins_do_not_crash() -> None:
+    # 1 - 1e-20 is exactly 1 in floating point, and log(1) is 0.
+    assert cases_needed(1e-20) > 10**20
 
 
 @pytest.mark.parametrize("margin", [-0.01, float("nan"), float("inf")])

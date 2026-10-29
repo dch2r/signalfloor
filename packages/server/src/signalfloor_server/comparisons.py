@@ -46,12 +46,14 @@ async def compare(
     seed: int | None,
     shared_only: bool = False,
     margin: float | None = None,
+    score_range: tuple[float, float] = (0.0, 1.0),
 ) -> ComparisonOut:
     """Paired bootstrap of candidate minus baseline.
 
     By default both runs must have exactly the same cases, like `signalfloor compare`. With
-    shared_only, cases in only one run are left out and the rest are compared. The caller is
-    then responsible for telling the user how many were left out.
+    shared_only, the shared cases are compared and each case in only one run counts as
+    missing: it could have been anything in the score range, so it widens the bounds. A
+    candidate that crashed on some cases can't pass by leaving them out.
 
     Raises RunNotFound if a run doesn't exist and ValueError if the runs can't be paired.
     """
@@ -59,15 +61,18 @@ async def compare(
     for run_id in (baseline_id, candidate_id):
         if await session.get(Run, run_id) is None:
             raise RunNotFound(run_id)
-    key = (baseline_id, candidate_id, confidence, n_resamples, seed, shared_only, margin)
+    options = (confidence, n_resamples, seed, shared_only, margin, score_range)
+    key = (baseline_id, candidate_id, *options)
     if seed is not None and key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
 
     baseline = await scores(session, baseline_id)
     candidate = await scores(session, candidate_id)
+    missing = 0
     if shared_only:
         shared = baseline.keys() & candidate.keys()
+        missing = len(baseline.keys() | candidate.keys()) - len(shared)
         baseline = {k: v for k, v in baseline.items() if k in shared}
         candidate = {k: v for k, v in candidate.items() if k in shared}
     # CPU bound, so it runs in a thread to keep the event loop free, and through the limiter.
@@ -80,6 +85,8 @@ async def compare(
             n_resamples=n_resamples,
             seed=seed,
             margin=margin,
+            score_range=score_range,
+            missing_cases=missing,
         ),
         limiter=_bootstraps,
     )
@@ -95,9 +102,14 @@ async def compare(
         n_cases=result.n_cases,
         n_resamples=result.n_resamples,
         verdict=result.verdict.value,
+        bound_low=result.bound_low,
+        bound_high=result.bound_high,
         largest_drop_not_ruled_out=result.largest_drop_not_ruled_out,
         unseen_share=result.unseen_share,
         max_case_drop=result.max_case_drop,
+        missing_cases=result.missing_cases,
+        min_diff=result.min_diff,
+        max_diff=result.max_diff,
         margin=result.margin,
         decision=result.decision.value if result.decision else None,
         cases_needed=(

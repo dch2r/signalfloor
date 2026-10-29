@@ -97,6 +97,8 @@ async def compare_runs(
         float | None,
         Query(ge=0, description="The largest drop you accept. Adds a pass or fail decision."),
     ] = None,
+    score_low: Annotated[float, Query(description="The lowest score the metric can give.")] = 0.0,
+    score_high: Annotated[float, Query(description="The highest score the metric can give.")] = 1.0,
 ) -> ComparisonOut:
     """Paired bootstrap of candidate minus baseline, the same test as `signalfloor compare`.
 
@@ -112,6 +114,7 @@ async def compare_runs(
             seed=seed,
             shared_only=shared_only,
             margin=margin,
+            score_range=(score_low, score_high),
         )
     except RunNotFound as e:
         raise HTTPException(404, str(e)) from e

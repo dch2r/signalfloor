@@ -6,6 +6,33 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** scores must lie in a stated range, 0 to 1 unless you pass `--score-range LOW
+  HIGH` (`score_range` in the library, `score_low` and `score_high` in the API). 0.3.0
+  guessed the range from the scores seen, so a sample where every score was 100.5 could pass
+  any margin while the same sample at 0.5 could not.
+- The verdict and the decision now come from bounds that widen the bootstrap interval on both
+  sides, not only for passing. Two cases that both got worse used to give an interval of
+  [-1, -1] and a fail. Drawn from an even population, that happened 25% of the time, and now
+  0%. The bounds widen only past the lowest and highest difference the eval saw, so sparse
+  results that already contain both extremes keep the plain bootstrap interval.
+- The server and dashboard count cases that only one run has as missing. Each could be
+  anything in the score range, so they widen the bounds. Before, a candidate that crashed on
+  10 of 200 cases could pass a margin of 0.02 by leaving them out.
+- The dashboard says "likely" instead of implying proof, and shows the bounds and any missing
+  cases.
+
+### Added
+
+- `bound_low`, `bound_high`, `min_diff`, `max_diff` and `missing_cases` on comparisons, in the
+  library, the JSON output and the API. The JSON output now also has
+  `largest_drop_not_ruled_out`, which 0.3.0 left out.
+
+### Fixed
+
+- `--margin 1e-20` no longer crashes with a ZeroDivisionError.
+
 ## [0.3.0] - 2026-10-29
 
 ### Changed

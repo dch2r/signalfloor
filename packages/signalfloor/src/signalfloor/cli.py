@@ -99,6 +99,14 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         help="the largest drop in mean score you will accept, such as 0.02",
     )
+    compare.add_argument(
+        "--score-range",
+        nargs=2,
+        type=float,
+        metavar=("LOW", "HIGH"),
+        default=(0.0, 1.0),
+        help="the lowest and highest score your metric can give (default: 0 1)",
+    )
     _add_common_options(compare)
     compare.set_defaults(handler=_run_compare)
 
@@ -194,6 +202,7 @@ def _run_compare(args: argparse.Namespace) -> int:
         n_resamples=args.resamples,
         seed=args.seed,
         margin=args.margin,
+        score_range=tuple(args.score_range),
     )
     print(_to_json(result) if args.format == "json" else _format_compare(result))
     if result.decision is not None:
@@ -228,7 +237,13 @@ def _run_flaky(args: argparse.Namespace) -> int:
 
 
 def _to_json(result: Comparison | Agreement | Stability) -> str:
-    return json.dumps(dataclasses.asdict(result), indent=2)
+    data = dataclasses.asdict(result)
+    if isinstance(result, Comparison):
+        # Properties, which asdict leaves out.
+        data["bound_low"] = result.bound_low
+        data["bound_high"] = result.bound_high
+        data["largest_drop_not_ruled_out"] = result.largest_drop_not_ruled_out
+    return json.dumps(data, indent=2)
 
 
 def _format_compare(r: Comparison) -> str:
@@ -238,6 +253,8 @@ def _format_compare(r: Comparison) -> str:
         f"baseline    {r.baseline_mean:.4f}",
         f"candidate   {r.candidate_mean:.4f}",
         f"change      {r.delta:+.4f}  ({level} CI {r.ci_low:+.4f} to {r.ci_high:+.4f})",
+        f"bounds      {r.bound_low:+.4f} to {r.bound_high:+.4f}  "
+        "(the interval widened for cases the eval may have missed)",
         "",
         f"verdict     {_VERDICT_TEXT[r.verdict]}",
     ]

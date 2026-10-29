@@ -286,6 +286,16 @@ export interface components {
             shared_only: boolean;
             /** Margin */
             margin?: number | null;
+            /**
+             * Score Low
+             * @default 0
+             */
+            score_low: number;
+            /**
+             * Score High
+             * @default 1
+             */
+            score_high: number;
         };
         /** ComparisonOut */
         ComparisonOut: {
@@ -317,12 +327,22 @@ export interface components {
             n_resamples: number;
             /** Verdict */
             verdict: string;
+            /** Bound Low */
+            bound_low: number;
+            /** Bound High */
+            bound_high: number;
             /** Largest Drop Not Ruled Out */
             largest_drop_not_ruled_out: number;
             /** Unseen Share */
             unseen_share: number;
             /** Max Case Drop */
             max_case_drop: number;
+            /** Missing Cases */
+            missing_cases: number;
+            /** Min Diff */
+            min_diff: number;
+            /** Max Diff */
+            max_diff: number;
             /** Margin */
             margin?: number | null;
             /** Decision */
@@ -690,6 +710,10 @@ export interface operations {
                 shared_only?: boolean;
                 /** @description The largest drop you accept. Adds a pass or fail decision. */
                 margin?: number | null;
+                /** @description The lowest score the metric can give. */
+                score_low?: number;
+                /** @description The highest score the metric can give. */
+                score_high?: number;
             };
             header?: never;
             path: {
