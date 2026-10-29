@@ -17,6 +17,20 @@ export function CompareForm({ runs }: { runs: Run[] }) {
         <RunPicker name="baseline" label="Baseline" runs={runs} selected={previous.id} />
         <RunPicker name="candidate" label="Candidate" runs={runs} selected={newest.id} />
       </div>
+      <label className="mt-4 block text-sm sm:w-1/2">
+        <span className="text-muted">Largest acceptable drop (optional)</span>
+        <input
+          name="margin"
+          type="number"
+          min="0"
+          step="any"
+          placeholder="e.g. 0.02"
+          className="mt-1 block w-full rounded-md border border-line bg-background px-2 py-1.5"
+        />
+        <span className="mt-1 block text-xs text-muted">
+          With a margin you get a pass, fail or needs more evidence decision.
+        </span>
+      </label>
       <button
         type="submit"
         className="mt-4 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"

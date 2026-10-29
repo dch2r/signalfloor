@@ -24,6 +24,14 @@ describe("CompareForm", () => {
     );
   });
 
+  it("has an optional margin field", () => {
+    render(<CompareForm runs={[run("new", "v2"), run("old", "v1")]} />);
+
+    const margin = screen.getByLabelText(/Largest acceptable drop/) as HTMLInputElement;
+    expect(margin.name).toBe("margin");
+    expect(margin.required).toBe(false);
+  });
+
   it("is hidden with fewer than two runs", () => {
     const { container } = render(<CompareForm runs={[run("only", "v1")]} />);
 

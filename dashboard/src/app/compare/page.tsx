@@ -6,7 +6,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { LeftOutNotice } from "@/components/LeftOutNotice";
 import { VerdictBanner } from "@/components/VerdictBanner";
 import { createApi, type Run } from "@/lib/api";
-import { isRunId } from "@/lib/ids";
+import { isRunId, parseMargin } from "@/lib/ids";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -33,11 +33,16 @@ async function Comparison({ searchParams }: { searchParams: SearchParams }) {
     return <Failed message="Pick a baseline and a candidate run on the Runs page." />;
   }
 
+  const margin = parseMargin(params.margin);
+  if (margin === null) {
+    return <Failed message="The largest acceptable drop must be a number, zero or more." />;
+  }
+
   const api = createApi();
   const [baseline, candidate, comparison, diff] = await Promise.all([
     api.getRun(baselineId),
     api.getRun(candidateId),
-    api.compareRuns(baselineId, candidateId),
+    api.compareRuns(baselineId, candidateId, margin),
     api.diffRuns(baselineId, candidateId),
   ]);
   if (!baseline.ok) return <Failed message={baseline.message} />;
