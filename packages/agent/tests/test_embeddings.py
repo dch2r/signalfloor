@@ -92,3 +92,11 @@ def test_bad_responses_raise(payload: dict[str, object], message: str) -> None:
 def test_rejects_bad_batch_size() -> None:
     with pytest.raises(ValueError, match="batch_size"):
         OpenAICompatibleEmbedder(batch_size=0)
+
+
+def test_the_cache_name_includes_the_model_revision() -> None:
+    plain = OpenAICompatibleEmbedder("m")
+    pinned = OpenAICompatibleEmbedder("m", revision="sha256:a")
+    updated = OpenAICompatibleEmbedder("m", revision="sha256:b")
+
+    assert len({plain.name, pinned.name, updated.name}) == 3

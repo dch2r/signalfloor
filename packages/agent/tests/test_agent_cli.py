@@ -1,4 +1,5 @@
 import argparse
+import dataclasses
 import json
 from pathlib import Path
 
@@ -202,9 +203,43 @@ def test_a_run_writes_its_manifest(tmp_path: Path, offline: dict[str, object]) -
     assert identity["model"] == "qwen3:1.7b"
     assert identity["corpus_sha256"] == manifest.corpus_hash(DATASET.corpus)
     assert identity["code_sha256"] == manifest.code_hash()
-    assert "questions" not in identity
+    assert identity["model_digest"] == "sha256:test"
+    assert identity["embedding_model_digest"] == "sha256:test"
+    assert [q[0] for q in saved["questions"]] == ["q0", "q1"]
     assert saved["info"]["git_commit"] == "abc123"
-    assert saved["info"]["model_digest"] == "sha256:test"
+
+
+def test_new_model_weights_under_the_same_name_block_a_resume(
+    tmp_path: Path,
+    offline: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out = tmp_path / "run.jsonl"
+    cli.main(eval_args(out))
+    capsys.readouterr()
+    monkeypatch.setattr(manifest, "model_digest", lambda model, base_url: "sha256:new")
+
+    assert cli.main(eval_args(out)) == 2
+    assert "model_digest: 'sha256:test' before, 'sha256:new' now" in capsys.readouterr().err
+
+
+def test_changed_gold_answers_block_a_resume(
+    tmp_path: Path,
+    offline: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Same ids and the same passages, so the corpus hash can't see it.
+    out = tmp_path / "run.jsonl"
+    cli.main(eval_args(out))
+    capsys.readouterr()
+    edited = tuple(dataclasses.replace(q, answer="Lyon") for q in QUESTIONS)
+    monkeypatch.setattr(cli, "load_hotpot", lambda n, *, offset=0: Dataset(edited, DATASET.corpus))
+
+    assert cli.main(eval_args(out)) == 2
+    err = capsys.readouterr().err
+    assert "Question 1 was 'q0' and is now the same id with changes" in err
 
 
 def test_resuming_with_the_same_setup_works(tmp_path: Path, offline: dict[str, object]) -> None:
