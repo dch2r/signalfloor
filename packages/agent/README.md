@@ -141,8 +141,11 @@ What signalfloor says:
 
 - **v2 really improves F1.** Against each of the three v1 runs the change is +0.084, +0.095 and
   +0.096, and every 95% interval is above zero.
-- **The noise floor is small.** Across the three identical v1 runs the mean moved by at most
-  0.016, and only 3 of 100 cases changed score. The v2 gain is about five times that.
+- **The gain is bigger than rerun noise.** Across the three identical v1 runs the mean moved by
+  at most 0.013, and only 3 of 100 cases changed score. With only three runs signalfloor puts
+  the noise band at +/-0.043, which allows for runs moving together. The v2 gain is about twice
+  that. An earlier version assumed cases vary independently and gave +/-0.016, which made the
+  gain look five times the noise.
 - **Exact match alone cannot confirm it.** Its change of +0.06 has an interval from -0.02 to
   +0.14, so F1, which gives partial credit, is the more sensitive metric here.
 - **v2 also made something worse.** Supporting recall dropped by 0.105, interval -0.185 to
