@@ -116,3 +116,38 @@ describe("compare calls", () => {
     expect(urls).toEqual(["http://api/runs/a/diff/b?limit=5"]);
   });
 });
+
+describe("api key", () => {
+  function recordAuth(apiKey: string | undefined) {
+    const seen: (string | null)[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      seen.push(input instanceof Request ? input.headers.get("authorization") : null);
+      return new Response("[]", { headers: { "content-type": "application/json" } });
+    };
+    return { seen, api: createApi("http://api", fetchImpl, apiKey) };
+  }
+
+  it("sends the key as a bearer token", async () => {
+    const { seen, api } = recordAuth("secret");
+    await api.listRuns();
+    expect(seen).toEqual(["Bearer secret"]);
+  });
+
+  it("sends nothing without a key", async () => {
+    const { seen, api } = recordAuth(undefined);
+    await api.listRuns();
+    expect(seen).toEqual([null]);
+  });
+
+  it("explains a refused key", async () => {
+    const api = createApi(
+      "http://api",
+      respond(401, { detail: "missing or wrong API key" }),
+      "wrong",
+    );
+    expect(await api.listRuns()).toEqual({
+      ok: false,
+      message: "The API answered 401: missing or wrong API key",
+    });
+  });
+});
