@@ -49,7 +49,7 @@ runs:
         set +f
 
         # Run the signalfloor code from the same commit as this action, so
-        # dch2r/signalfloor@v0.3.0 always runs signalfloor 0.3.0.
+        # dch2r/signalfloor@v0.4.0 always runs signalfloor 0.4.0.
         set +e
         output=$(uv tool run --quiet --from "$GITHUB_ACTION_PATH/packages/signalfloor" \
           signalfloor "$SF_COMMAND" "${files[@]}" "${options[@]}" 2>&1)

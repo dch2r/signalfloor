@@ -1,6 +1,6 @@
 [project]
 name = "signalfloor"
-version = "0.3.0"
+version = "0.4.0"
 description = "Find out if a drop in your LLM eval scores is a real regression or just noise."
 readme = "README.md"
 license = "Apache-2.0"
