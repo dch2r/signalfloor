@@ -85,6 +85,9 @@ uv run signalfloor-agent eval --questions 5 --prompt v2 --out runs/traced.jsonl 
     --otlp-endpoint http://localhost:8000/v1/traces
 ```
 
+If the server requires an API key, pass it the standard OpenTelemetry way:
+`OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <key>"`.
+
 Each line of the results file then has a `trace_id`. Any OTLP/HTTP backend works, such as
 Jaeger, but sending to signalfloor-server lets you open a case and its trace together.
 

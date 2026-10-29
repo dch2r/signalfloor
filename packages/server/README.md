@@ -25,6 +25,7 @@ The server reads its settings from environment variables:
 | Variable | Default |
 |---|---|
 | `SIGNALFLOOR_DATABASE_URL` | `postgresql+asyncpg://localhost/signalfloor` |
+| `SIGNALFLOOR_API_KEYS` | empty, so the API is open |
 
 ## Endpoints
 
@@ -122,6 +123,38 @@ uv run signalfloor-server prune-spans --older-than-days 30
 
 It deletes 10,000 spans per transaction so a big cleanup doesn't lock the table for long. Run
 it on a schedule, for example as a Kubernetes CronJob.
+
+## API keys and who this is for
+
+Set `SIGNALFLOOR_API_KEYS` to one or more keys, separated by commas. Every endpoint except the
+health checks then needs `Authorization: Bearer <key>`:
+
+```bash
+SIGNALFLOOR_API_KEYS=key-one,key-two uv run signalfloor-server serve
+curl -H "Authorization: Bearer key-one" localhost:8000/runs
+```
+
+More than one key lets you rotate without downtime: add the new key, move the clients over,
+then remove the old one. Agents send the key with OpenTelemetry's standard setting,
+`OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer key-one"`. The dashboard sends
+`SIGNALFLOOR_API_KEY` from its server, so the key never reaches a browser.
+
+Without keys the API is open to anything that can reach it, and the server logs a warning at
+startup. That's fine on your own machine and nowhere else.
+
+**What this is built for: one team, on a network it controls.** Be clear about what it isn't:
+
+- **There are no users or projects.** Any key can read, change and delete everything. Two
+  teams that must not see each other's data need two deployments.
+- **Traces can be sensitive.** Prompts and passages are never recorded, but search queries,
+  answers and any attribute an agent adds are stored as sent. Redact at the source.
+- **The dashboard has no login.** Anyone who can open it sees every run. Put it behind your own
+  sign in, such as an SSO proxy or a VPN.
+- **There are no per client quotas.** Request sizes and comparison costs are capped, and
+  concurrent bootstraps are limited, but one client with a key can still keep the server busy.
+
+Per project access, a dashboard login and quotas would be the next steps toward a service
+shared by several teams.
 
 ## Health checks
 

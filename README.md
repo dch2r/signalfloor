@@ -247,6 +247,10 @@ docker compose up --build
 Then open http://localhost:3000 for the dashboard and http://localhost:8000/docs for the API.
 `scripts/smoke-test.sh` checks that everything works together. CI runs it on every pull request.
 
+Set `SIGNALFLOOR_API_KEY` before `docker compose up` to require an API key. The stack is built
+for one team on a network it controls. The [server README](packages/server/README.md#api-keys-and-who-this-is-for)
+says what that does and doesn't cover.
+
 To run it on Kubernetes, use the Helm chart in [deploy/helm/signalfloor](deploy/helm/signalfloor).
 CI installs it on a kind cluster on every pull request.
 
