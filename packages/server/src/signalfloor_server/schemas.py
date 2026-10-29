@@ -61,7 +61,14 @@ class ComparisonOut(BaseModel):
     confidence: float
     n_cases: int
     n_resamples: int
+    # regression, improvement or inconclusive. Inconclusive means the interval contains zero,
+    # not that nothing changed.
     verdict: str
+    # The drop the data can't rule out: zero when the interval sits above zero.
+    largest_drop_not_ruled_out: float
+    # Only with a margin: pass, fail or needs_more_evidence.
+    margin: float | None = None
+    decision: str | None = None
 
 
 class SpanOut(BaseModel):
@@ -119,6 +126,7 @@ class CompareJobIn(BaseModel):
     n_resamples: int = Field(default=100_000, ge=100, le=MAX_JOB_RESAMPLES)
     seed: int | None = Field(default=None, ge=0)
     shared_only: bool = False
+    margin: float | None = Field(default=None, ge=0)
 
 
 class JobOut(BaseModel):

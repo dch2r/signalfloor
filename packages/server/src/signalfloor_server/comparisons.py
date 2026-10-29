@@ -45,6 +45,7 @@ async def compare(
     n_resamples: int,
     seed: int | None,
     shared_only: bool = False,
+    margin: float | None = None,
 ) -> ComparisonOut:
     """Paired bootstrap of candidate minus baseline.
 
@@ -58,7 +59,7 @@ async def compare(
     for run_id in (baseline_id, candidate_id):
         if await session.get(Run, run_id) is None:
             raise RunNotFound(run_id)
-    key = (baseline_id, candidate_id, confidence, n_resamples, seed, shared_only)
+    key = (baseline_id, candidate_id, confidence, n_resamples, seed, shared_only, margin)
     if seed is not None and key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
@@ -78,6 +79,7 @@ async def compare(
             confidence=confidence,
             n_resamples=n_resamples,
             seed=seed,
+            margin=margin,
         ),
         limiter=_bootstraps,
     )
@@ -93,6 +95,9 @@ async def compare(
         n_cases=result.n_cases,
         n_resamples=result.n_resamples,
         verdict=result.verdict.value,
+        largest_drop_not_ruled_out=result.largest_drop_not_ruled_out,
+        margin=result.margin,
+        decision=result.decision.value if result.decision else None,
     )
     if seed is not None:
         _cache[key] = comparison

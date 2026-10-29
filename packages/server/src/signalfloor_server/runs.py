@@ -93,6 +93,10 @@ async def compare_runs(
     shared_only: Annotated[
         bool, Query(description="Compare only the cases both runs have, instead of refusing.")
     ] = False,
+    margin: Annotated[
+        float | None,
+        Query(ge=0, description="The largest drop you accept. Adds a pass or fail decision."),
+    ] = None,
 ) -> ComparisonOut:
     """Paired bootstrap of candidate minus baseline, the same test as `signalfloor compare`.
 
@@ -107,6 +111,7 @@ async def compare_runs(
             n_resamples=n_resamples,
             seed=seed,
             shared_only=shared_only,
+            margin=margin,
         )
     except RunNotFound as e:
         raise HTTPException(404, str(e)) from e
