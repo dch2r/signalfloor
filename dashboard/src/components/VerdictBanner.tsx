@@ -108,7 +108,8 @@ export function VerdictBanner({ comparison }: { comparison: Comparison }) {
       <IntervalAxis comparison={comparison} />
 
       <p className="mt-3 text-xs text-muted">
-        Paired bootstrap over {comparison.n_cases} shared cases with{" "}
+        Wide bar: the bounds, a confidence interval by betting. Narrow bar: the paired bootstrap
+        over {comparison.n_cases} shared cases with{" "}
         {comparison.n_resamples.toLocaleString("en-US")} resamples.
       </p>
     </section>
@@ -124,25 +125,39 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** The interval on an axis centred on zero. If the bar crosses the zero line, it is noise. */
+/**
+ * The bounds the verdict uses, as a wide pale bar, with the bootstrap interval as a narrow dark
+ * bar inside it and the change as a dot. Zero is marked, so a bounds bar that crosses it is an
+ * inconclusive result even when the bootstrap bar does not.
+ */
 export function IntervalAxis({ comparison }: { comparison: Comparison }) {
-  const { ci_low, ci_high, delta } = comparison;
-  const extent = axisExtent([ci_low, ci_high, delta]);
-  const left = toPercent(ci_low, extent);
-  const right = toPercent(ci_high, extent);
+  const { ci_low, ci_high, bound_low, bound_high, delta } = comparison;
+  const extent = axisExtent([bound_low, bound_high, ci_low, ci_high, delta]);
+  const bar = (low: number, high: number) => {
+    const left = toPercent(low, extent);
+    return { left: `${left}%`, width: `${Math.max(toPercent(high, extent) - left, 0.5)}%` };
+  };
 
   return (
     <div
       className="relative mt-5 h-8"
       role="img"
-      aria-label={`Interval from ${formatDelta(ci_low)} to ${formatDelta(ci_high)}, zero marked`}
+      aria-label={
+        `Bounds from ${formatDelta(bound_low)} to ${formatDelta(bound_high)}, bootstrap interval ` +
+        `from ${formatDelta(ci_low)} to ${formatDelta(ci_high)}, zero marked`
+      }
     >
       <div className="absolute inset-x-0 top-1/2 h-px bg-line" />
       <div className="absolute top-0 h-full w-px bg-muted" style={{ left: "50%" }} />
       <div
+        data-testid="bounds-bar"
+        className="absolute top-1/2 h-3 -translate-y-1/2 rounded-full bg-foreground/20"
+        style={bar(bound_low, bound_high)}
+      />
+      <div
         data-testid="interval"
-        className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-foreground/60"
-        style={{ left: `${left}%`, width: `${Math.max(right - left, 0.5)}%` }}
+        className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-foreground/70"
+        style={bar(ci_low, ci_high)}
       />
       <div
         className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
