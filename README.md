@@ -16,86 +16,29 @@ Most eval tools show you the two numbers and leave the decision to you. But with
 test cases, a 2 point drop can easily happen by chance. So teams either ship real regressions
 because they look small, or waste days chasing changes that were never there.
 
-## What signalfloor does
+## Quickstart
 
-signalfloor compares two eval runs and tells you if the difference is real.
-
-- It pairs the runs case by case and decides with a confidence interval by betting
-  ([Waudby-Smith and Ramdas, 2024](https://arxiv.org/abs/2010.09686)), which stays valid at
-  any sample size, even on 7 or 20 cases where a bootstrap goes badly wrong. A paired
-  bootstrap interval is shown next to it as a quick estimate, but no call is made from it.
-- With a margin, it gives a release decision: pass, fail, or needs more evidence, and says
-  how many cases the margin takes.
-- It measures how often your LLM judge agrees with human labels, so you know how far to trust
-  its scores.
-- It finds flaky test cases, the ones whose scores change between two identical runs.
-- It reads OpenTelemetry traces, so you can use it alongside tools like Langfuse or Phoenix.
-- It runs in CI and fails a pull request when a regression is shown, or, with a margin, when
-  the eval is too small to show the change is safe.
-
-**Does it work?** On 180,000 trials with regressions of known size planted into a real
-agent's results, the usual rule, "fail if the mean dropped by more than the margin", shipped
-up to 48% of bad changes and failed up to 42% of good ones on held-out questions. signalfloor
-kept both at 0.3% or less. The cost is that small evals often get "needs more evidence". The
-[validation study](studies/validation) has every rate, including that one.
-
-## Install
+Install it, or skip that and run it with [uv](https://docs.astral.sh/uv/) as `uvx signalfloor`.
+Python 3.11 or newer.
 
 ```bash
 pip install signalfloor
 ```
 
-Or run it without installing, using [uv](https://docs.astral.sh/uv/):
+Get two small example runs, 120 cases each, into an empty folder:
 
 ```bash
-uvx signalfloor --help
+mkdir signalfloor-try && cd signalfloor-try
+for f in baseline candidate-worse candidate-same; do
+  curl -fsSLO https://raw.githubusercontent.com/dch2r/signalfloor/v0.5.1/examples/$f.jsonl
+done
 ```
 
-Python 3.11 or newer is needed.
-
-## Status
-
-Alpha. The `compare`, `calibrate` and `flaky` commands and the GitHub Action work today. See
-the [changelog](CHANGELOG.md) for what changed in each release.
-
-The repository has four parts:
-
-| Part | What it is |
-|---|---|
-| [packages/signalfloor](packages/signalfloor) | The library and CLI, published to PyPI |
-| [packages/agent](packages/agent) | A LangGraph agent used to test signalfloor on real output |
-| [packages/server](packages/server) | An API that stores runs and traces and compares runs |
-| [dashboard](dashboard) | A Next.js web view of the stored runs |
-
-## See it on a real agent
-
-[packages/agent](packages/agent) has a LangGraph agent that answers multi-hop HotpotQA questions
-with a local model. It is used to test signalfloor on real agent output. Two findings so far:
-
-- Hybrid search looked like the obvious choice, but at top 2 it was a real 8 point recall
-  regression against dense search alone, and its small win at top 10 was noise.
-- A new prompt raised F1 by about 9 points, about twice the noise band measured from three
-  identical reruns, and it also cut retrieval recall by 10 points, which the headline score
-  hid. On 100 questions both are likely but not proven: the bootstrap calls them, and
-  signalfloor's bounds, which hold at any sample size, fall just short.
-
-The [agent README](packages/agent/README.md) has the numbers and how to rerun them.
-
-## Compare two eval runs
-
-Save each eval run as a JSON Lines file with one test case per line:
-
-```json
-{"id": "q-001", "score": 0.85}
-{"id": "q-002", "score": true}
-```
-
-Scores can be numbers between 0 and 1 or true/false. For another scale, such as a judge that
-scores 1 to 5, add `--score-range 1 5`. signalfloor needs to know how far a score can move,
-and it never guesses that from the scores it sees. Then compare the two runs:
+Each line is one test case with an id and a score: `{"id": "q-000", "score": 1}`. Compare the
+baseline with a candidate that got worse:
 
 ```console
-$ signalfloor compare examples/baseline.jsonl examples/candidate-worse.jsonl
+$ signalfloor compare baseline.jsonl candidate-worse.jsonl --seed 0
 cases       120
 baseline    0.7500
 candidate   0.5833
@@ -105,83 +48,82 @@ bounds      -0.3119 to -0.0192  (95% at any sample size, the calls below use the
 verdict     regression
 ```
 
-Two intervals are shown. The bootstrap interval is the familiar quick estimate, but it is
-only approximately right, and on small or lopsided evals it can be far off. If a change broke
-4 of 100 questions, a 20 question eval misses all of them 44% of the time, every difference
-is zero, and the bootstrap interval is [0, 0]. Two cases that both got worse give [-1, -1].
+The exit code is 1, so this fails a CI job. The verdict comes from the bounds. The bootstrap
+interval is shown as a quick estimate, and `--seed` only fixes that one.
 
-So every call comes from the bounds instead: a confidence interval by betting
-([Waudby-Smith and Ramdas, 2024](https://arxiv.org/abs/2010.09686)). It holds at any sample
-size, as long as the cases are drawn independently and scores stay in their range. The tests
-check it by exact enumeration of every possible eval of up to 12 cases. The price is width:
-on the agent's 100 question comparisons the bounds are about half again as wide as the
-bootstrap interval.
-
-The verdict is `regression`, `improvement` or `inconclusive`. Inconclusive means the bounds
-contain zero. It does not mean nothing changed: a small eval can be inconclusive about a large
-drop, so the command says how large a drop it can't rule out:
+To decide whether to ship, give the largest drop you accept with `--margin`:
 
 ```console
-$ signalfloor compare v1.jsonl v2.jsonl
+$ signalfloor compare baseline.jsonl candidate-same.jsonl --margin 0.1
+...
+verdict     inconclusive
+            the data can't rule out a drop of up to 0.1250
+decision    needs more evidence (margin 0.1)
+```
+
+| Decision | When | Exit code |
+|---|---|---|
+| pass | the lower bound is at or above `-margin` | 0 |
+| fail | the upper bound is below `-margin` | 1 |
+| needs more evidence | anything else: 120 cases can't tell | 3 |
+
+Here 120 cases can't rule out a drop of 0.125, so a margin of 0.1 gets needs more evidence, and
+a margin of 0.2 would pass. [Using signalfloor on your own evals](docs/your-own-evals.md) covers
+exporting your results, choosing a margin and what to do with each answer.
+
+## What signalfloor does
+
+signalfloor compares two eval runs and tells you if the difference is real. It works on scores
+you already have, from any eval tool.
+
+- `compare` pairs the runs case by case and decides with a confidence interval by betting
+  ([Waudby-Smith and Ramdas, 2024](https://arxiv.org/abs/2010.09686)), which is valid at any
+  sample size. With a margin it gives a release decision.
+- `calibrate` measures how often your LLM judge agrees with human labels, so you know how far
+  to trust its scores.
+- `flaky` finds test cases whose scores change between identical runs, and how far a rerun's
+  mean moves on its own.
+- A GitHub Action runs any of them as a CI check.
+- A server and dashboard store runs and OpenTelemetry traces, and compare any two runs.
+
+A [validation study](studies/validation) planted regressions of known size into a real agent's
+results, 180,000 trials in all. On held-out questions, the rule "fail if the mean dropped by
+more than the margin" shipped up to 48% of bad changes and failed up to 42% of good ones.
+signalfloor kept both at 0.3% or less. In exchange, small evals often get needs more evidence:
+at margin 0.05 it approved 24% of good changes at 100 cases and 47% at 200.
+[How signalfloor decides](docs/methodology.md) explains the method and why it replaced a
+bootstrap.
+
+## Compare two eval runs
+
+Scores can be numbers or true/false, higher is better. They must lie between 0 and 1 unless you
+give another range with `--score-range`, for example `--score-range 1 5` for a judge that scores
+1 to 5. Both runs must contain the same case ids.
+
+The verdict is `regression`, `improvement` or `inconclusive`. Inconclusive means the bounds
+contain zero, which is not the same as no change: a small eval can be inconclusive about a large
+drop, so the command says how large a drop it can't rule out. On 20 questions from the
+reference agent:
+
+```console
+$ signalfloor compare v1.jsonl v2.jsonl --margin 0.02
 cases       20
 change      +0.0039  (bootstrap 95% CI -0.1306 to +0.1513)
 bounds      -0.2494 to +0.2740  (95% at any sample size, the calls below use these)
 
 verdict     inconclusive
             the data can't rule out a drop of up to 0.2494
-```
-
-That is a 20 question eval, and a drop of 25 points could hide in it.
-
-### Gate a release on a margin
-
-To decide whether to ship, say how large a drop you accept with `--margin`. The decision is
-kept apart from the verdict:
-
-| Decision | When | Exit code |
-|---|---|---|
-| pass | the lower bound is at or above `-margin`, so any drop is within it | 0 |
-| fail | the upper bound is below `-margin`, so the drop is larger | 1 |
-| needs more evidence | anything else: the data can't tell | 3 |
-
-```console
-$ signalfloor compare v1.jsonl v2.jsonl --margin 0.02
-...
 decision    needs more evidence (margin 0.02)
             20 cases can't rule out a drop of 0.2167 even if nothing changed
             when nothing changes, a margin of 0.02 needs at least 249 cases
 ```
 
-A small eval can't rule out much, because it can miss a change that breaks a few questions
-outright. When nothing changed at all, these are the cases it takes to pass, with scores
-between 0 and 1:
+When it can't decide, the command says how many cases the margin takes when nothing changed. An
+eval with a clear improvement can pass with fewer, and one with losses needs more. Needs more
+evidence fails a CI job too. Without `--margin` the command exits with code 1 only for a
+regression.
 
-| Margin | 0.01 | 0.02 | 0.03 | 0.05 | 0.10 |
-|---|---:|---:|---:|---:|---:|
-| Cases to pass an unchanged eval | 502 | 249 | 165 | 98 | 48 |
-
-These are not a floor for every eval. A clear improvement passes with fewer: 20 cases that
-all went from 0 to 1 pass a margin of 0.02. Any losses mean more.
-
-Needs more evidence fails a CI job too, because the eval was too small to show the change is
-safe. Add cases or accept a wider margin. Without `--margin` the command exits with code 1
-only for a regression.
-
-### Does it work?
-
-A [validation study](studies/validation) planted changes of known size into the agent's real
-results, with three kinds of damage, and checked the result on 100 held-out questions. The
-usual rule, "fail if the mean dropped by more than the margin", shipped up to 48% of bad
-changes and failed up to 42% of acceptable ones. signalfloor's bounds shipped at most 0.3%
-and failed at most 0.3%.
-
-The price is approval on small evals. At margin 0.05 signalfloor approved 24% of acceptable
-changes at 100 cases and 47% at 200, and almost none at 50 or fewer. The rest are "needs
-more evidence", which is the honest answer for an eval that small. Pick the margin and the
-eval size together.
-
-Run `signalfloor compare --help` to see all options, including `--format json` for machine
-readable output.
+Run `signalfloor compare --help` for every option, including `--format json`.
 
 ## Check if your LLM judge can be trusted
 
@@ -193,7 +135,8 @@ often the judge agrees with you. Put the judge labels and the human labels in tw
 {"id": "a-002", "label": "good"}
 ```
 
-Labels can be numbers, true/false or text. Then run:
+Labels can be numbers, true/false or text. The example files are in the repository's
+[examples](examples) folder. Then run:
 
 ```console
 $ signalfloor calibrate examples/judge.jsonl examples/human.jsonl --weights quadratic
@@ -218,20 +161,13 @@ Plain agreement can fool you. If 90% of answers are good, a judge that always sa
 agrees with humans 90% of the time without checking anything. Cohen's kappa removes the
 agreement you would get by chance, so that judge scores 0.
 
-The table shows where the judge goes wrong, not just how often. Rows are the judge's labels and
-columns the humans'. Here every mistake is one step too generous, which is what the positive
-bias means.
+The table shows where the judge goes wrong. Rows are the judge's labels and columns the
+humans'. Here every mistake is one step too generous, which is what the positive bias means.
 
-Use `--weights linear` or `--weights quadratic` for ordered ratings like 1 to 5, so a 4
-against a human 5 counts as close. The judge is trusted only when the whole confidence
-interval is above the threshold. It exits with code 0 only when the judge is trusted.
-
-**It won't trust a judge on thin evidence.** Every label the humans used needs at least 5
-examples, or the verdict is inconclusive and says which labels are short. Without that rule,
-two cases in perfect agreement came back trusted, and in simulations a judge whose true kappa
-was 0.54, below the threshold, was trusted up to 20% of the time when only 10% of cases were
-positive. With it, that stayed under 2% in every setting tried. Change the minimum with
-`--min-per-label`.
+Use `--weights linear` or `--weights quadratic` for ordered ratings like 1 to 5, so a 4 against
+a human 5 counts as close. The judge is trusted only when the whole confidence interval is above
+the threshold, and the command exits 0 only then. Every label the humans used needs at least 5
+examples (`--min-per-label`), or the verdict is inconclusive and says which labels are short.
 
 ## Find flaky cases and your noise floor
 
@@ -254,22 +190,13 @@ case                      spread  scores
 ...
 ```
 
-The noise band is the most useful number here: a change smaller than it could come from
-rerunning the same thing. It is estimated two ways and the larger wins:
+The noise band is how far a rerun's mean moves with nothing changed, so a smaller change could
+come from rerunning alone. It is estimated from the cases and from the run means, and the larger
+wins, because the cases alone miss shifts that move a whole run, like a judge update.
 
-- **From the cases.** How much each case moves, assuming cases move independently. Precise, but
-  blind to anything that shifts many cases at once, like a model update or a judge change.
-- **From the runs.** How much the run means themselves move. This catches shared shifts, but
-  three runs give only a rough estimate, so its band is wide. More reruns narrow it.
-
-In a simulation where every run shares a random shift, the cases only band held 71% of fresh
-reruns instead of 95%. The combined band held 97%. When cases really are independent the
-combined band is about 1.3 times wider than it needs to be, which is the price of the
-protection.
-
-A case is flaky when its score moves between runs. By default any movement counts, which
-suits pass/fail scores. For continuous scores set `--tolerance`, for example 0.1. The command
-exits with code 1 when more than 5% of cases are flaky. Change that with `--max-flaky-rate`.
+A case is flaky when its score moves between runs. By default any movement counts, which suits
+pass/fail scores. For continuous scores set `--tolerance`, for example 0.1. The command exits
+with code 1 when more than 5% of cases are flaky. Change that with `--max-flaky-rate`.
 
 ## Use it in GitHub Actions
 
@@ -280,15 +207,13 @@ Add a step after the job that produces your eval results:
   with:
     command: compare
     files: evals/baseline.jsonl evals/candidate.jsonl
+    options: --margin 0.05
 ```
 
-The step fails when the candidate is a real regression, and the result is written to the job
-summary. With `options: --margin 0.05` it also fails when the eval can't show the drop is
-within the margin. `command` can be `compare`, `calibrate` or `flaky`. Pass any other command
-line options through `options`, for example `options: --confidence 0.99`. The step also sets
-an `exit-code` output.
-
-Want to try everything first? The [examples](examples) folder has small result files.
+The step fails on a regression, and with a margin also when the eval can't show the drop is
+within it. The output goes to the job summary. `command` can be `compare`, `calibrate` or
+`flaky`, and `options` takes any other command line options. The step also sets an `exit-code`
+output.
 
 ## Run the whole stack
 
@@ -299,17 +224,56 @@ dashboard:
 docker compose up --build
 ```
 
-Then open http://localhost:3000 for the dashboard and http://localhost:8000/docs for the API.
-`scripts/smoke-test.sh` checks that everything works together. CI runs it on every pull request.
+Then load the reference agent's real runs, with Python 3 from the repository root:
+
+```bash
+python3 scripts/load-demo-data.py
+```
+
+It prints a link to a comparison of the two prompt versions. Open http://localhost:3000 for the
+dashboard and http://localhost:8000/docs for the API.
+
+![The compare page for the two prompt versions: inconclusive, with the bounds crossing zero while the bootstrap interval does not](docs/images/compare.png)
+
+The wide bar is the bounds the verdict uses and the narrow bar the bootstrap interval. Here the
+bootstrap says v2 is better, and the bounds can't confirm it on 100 questions.
 
 Set `SIGNALFLOOR_API_KEY` before `docker compose up` to require an API key. The stack is built
 for one team on a network it controls. The [server README](packages/server/README.md#api-keys-and-who-this-is-for)
 says what that does and doesn't cover.
 
 To run it on Kubernetes, use the Helm chart in [deploy/helm/signalfloor](deploy/helm/signalfloor).
-CI installs it on a kind cluster on every pull request.
+CI installs it on a kind cluster on every pull request, and `scripts/smoke-test.sh` checks the
+whole stack. [loadtest](loadtest) has a k6 load test and what it found about where the API
+bends under load.
 
-[loadtest](loadtest) has a k6 load test and what it found about where the API bends under load.
+## See it on a real agent
+
+[packages/agent](packages/agent) has a LangGraph agent that answers multi-hop HotpotQA questions
+with a local model. It is used to test signalfloor on real agent output. Two findings so far:
+
+- Hybrid search looked like the obvious choice, but at top 2 it was an 8 point recall
+  regression against dense search alone, and its small win at top 10 was noise.
+- A new prompt raised F1 by about 9 points, about twice the noise band measured from three
+  identical reruns, and it also cut retrieval recall by 10 points, which the headline score
+  hid. On 100 questions both are likely but not proven: the bootstrap calls them, and the
+  bounds fall just short.
+
+The [agent README](packages/agent/README.md) has the numbers and how to rerun them.
+
+## Status
+
+Alpha. The `compare`, `calibrate` and `flaky` commands, the GitHub Action, the server and the
+dashboard work today. See the [changelog](CHANGELOG.md) for each release.
+
+| Part | What it is |
+|---|---|
+| [packages/signalfloor](packages/signalfloor) | The library and CLI, published to PyPI |
+| [packages/agent](packages/agent) | A LangGraph agent used to test signalfloor on real output |
+| [packages/server](packages/server) | An API that stores runs and traces and compares runs |
+| [dashboard](dashboard) | A Next.js web view of the stored runs |
+| [studies/validation](studies/validation) | The validation study |
+| [docs](docs) | The method, a guide for your own evals, and design records |
 
 ## Development
 
