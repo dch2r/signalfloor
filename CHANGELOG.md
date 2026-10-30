@@ -6,6 +6,11 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-29
+
+The package itself only changes its description. The dashboard changes ship in the
+repository, not on PyPI: pull and rebuild to get them.
+
 ### Changed
 
 - The package description shows the margin workflow and every exit code, including 3 for
@@ -163,7 +168,8 @@ First release.
 - Text and JSON output for every command.
 - Exit code 1 when a check fails and 2 for bad input, so every command works as a CI check.
 
-[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/dch2r/signalfloor/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/dch2r/signalfloor/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/dch2r/signalfloor/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dch2r/signalfloor/compare/v0.3.0...v0.4.0

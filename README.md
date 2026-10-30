@@ -30,7 +30,7 @@ Get two small example runs, 120 cases each, into an empty folder:
 ```bash
 mkdir signalfloor-try && cd signalfloor-try
 for f in baseline candidate-worse candidate-same; do
-  curl -fsSLO https://raw.githubusercontent.com/dch2r/signalfloor/v0.5.1/examples/$f.jsonl
+  curl -fsSLO https://raw.githubusercontent.com/dch2r/signalfloor/v0.5.2/examples/$f.jsonl
 done
 ```
 
@@ -205,7 +205,7 @@ with code 1 when more than 5% of cases are flaky. Change that with `--max-flaky-
 Add a step after the job that produces your eval results:
 
 ```yaml
-- uses: dch2r/signalfloor@v0.5.1
+- uses: dch2r/signalfloor@v0.5.2
   with:
     command: compare
     files: evals/baseline.jsonl evals/candidate.jsonl
