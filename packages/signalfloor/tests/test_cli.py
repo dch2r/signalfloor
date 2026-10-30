@@ -30,7 +30,7 @@ def runs(tmp_path: Path) -> dict[str, str]:
         "base": write_run(tmp_path / "base.jsonl", base),
         "same": write_run(tmp_path / "same.jsonl", base),
         "worse": write_run(tmp_path / "worse.jsonl", [s - 0.2 for s in base]),
-        "better": write_run(tmp_path / "better.jsonl", [s + 0.05 for s in base]),
+        "better": write_run(tmp_path / "better.jsonl", [min(1.0, s + 0.1) for s in base]),
     }
 
 
@@ -43,7 +43,7 @@ def test_regression_exits_with_code_1(
     assert code == EXIT_REGRESSION
     assert "verdict     regression" in out
     assert "cases       80" in out
-    assert "change      -0.2000  (95% CI" in out
+    assert "change      -0.2000  (bootstrap 95% CI" in out
 
 
 def test_inconclusive_exits_with_code_0_and_says_what_it_cannot_rule_out(
@@ -57,16 +57,16 @@ def test_inconclusive_exits_with_code_0_and_says_what_it_cannot_rule_out(
     out = capsys.readouterr().out
     assert code == EXIT_OK
     assert "verdict     inconclusive" in out
-    assert "the data can't rule out a drop of up to 0.4836" in out
+    assert "the data can't rule out a drop of up to 0.4727" in out
     assert "set --margin" in out
 
 
 @pytest.mark.parametrize(
     ("candidate", "margin", "code", "decision"),
     [
-        ("same", "0.05", EXIT_OK, "pass"),
-        # 80 cases can't rule out a drop of 0.045, so identical runs can't pass 0.02.
-        ("same", "0.02", EXIT_NEEDS_MORE_EVIDENCE, "needs more evidence"),
+        ("same", "0.1", EXIT_OK, "pass"),
+        # 80 cases can't rule out a drop of 0.06, so identical runs can't pass 0.05.
+        ("same", "0.05", EXIT_NEEDS_MORE_EVIDENCE, "needs more evidence"),
         ("better", "0", EXIT_OK, "pass"),
         ("worse", "0.05", EXIT_REGRESSION, "fail"),
         # A drop of exactly 0.2 is shown, which a margin of 0.5 allows.
@@ -100,11 +100,11 @@ def test_margin_needs_more_evidence_when_the_interval_straddles_it(
 
 
 def test_margin_in_json(runs: dict[str, str], capsys: pytest.CaptureFixture[str]) -> None:
-    main(["compare", runs["base"], runs["same"], "--margin", "0.05", "--format", "json"])
+    main(["compare", runs["base"], runs["same"], "--margin", "0.1", "--format", "json"])
 
     result = json.loads(capsys.readouterr().out)
-    assert (result["margin"], result["decision"]) == (0.05, "pass")
-    assert result["unseen_share"] == pytest.approx(0.0451, abs=1e-4)
+    assert (result["margin"], result["decision"]) == (0.1, "pass")
+    assert result["no_change_drop"] == pytest.approx(0.0605, abs=1e-4)
     assert result["max_case_drop"] == 1
 
 
@@ -114,10 +114,9 @@ def test_says_how_many_cases_a_margin_needs(
     main(["compare", runs["base"], runs["same"], "--seed", "0", "--margin", "0.02"])
 
     out = capsys.readouterr().out
-    assert "the data can't rule out a drop of up to 0.0451" in out
-    assert "80 cases can't rule out a drop of 0.0451 even if nothing changed:\n" in out
-    assert "            a change that broke 4.5% of cases could miss every one of them" in out
-    assert "a margin of 0.02 needs at least 183 cases" in out
+    assert "the data can't rule out a drop of up to 0.0605" in out
+    assert "80 cases can't rule out a drop of 0.0605 even if nothing changed\n" in out
+    assert "when nothing changes, a margin of 0.02 needs at least 249 cases" in out
 
 
 def test_negative_margin_is_a_usage_error(

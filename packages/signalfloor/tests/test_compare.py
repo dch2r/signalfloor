@@ -1,8 +1,12 @@
+import itertools
 import math
+from collections.abc import Callable
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 
+from signalfloor._betting import rejects
 from signalfloor.compare import Decision, PairingError, Verdict, cases_needed, paired_bootstrap
 
 
@@ -166,14 +170,9 @@ def test_inconclusive_reports_the_largest_drop_it_cannot_rule_out() -> None:
     result = paired_bootstrap(base, noisy, seed=0)
 
     assert result.verdict is Verdict.INCONCLUSIVE
-    # Eight cases could miss a change to over a third of all cases. The lowest difference
-    # seen is -0.3, so those cases could each have fallen 0.7 further.
-    unseen = result.unseen_share
-    assert unseen == pytest.approx(1 - 0.025 ** (1 / 8))
-    assert result.min_diff == pytest.approx(-0.3)
-    expected = -(result.ci_low - unseen * 0.7)
-    assert result.largest_drop_not_ruled_out == pytest.approx(expected)
-    assert result.largest_drop_not_ruled_out > -result.ci_low
+    assert result.largest_drop_not_ruled_out == pytest.approx(-result.bound_low)
+    # Eight cases are little evidence, so the bounds reach well past the bootstrap interval.
+    assert result.bound_low < result.ci_low
     assert result.decision is None
 
 
@@ -187,18 +186,16 @@ def test_largest_drop_is_zero_for_a_proven_improvement() -> None:
 def test_a_zero_margin_passes_only_a_clear_improvement() -> None:
     same = {f"c{i}": 0.5 for i in range(20)}
     noisy = {f"c{i}": 0.6 if i % 2 else 0.4 for i in range(20)}
-    better = {f"c{i}": 0.9 for i in range(20)}
+    better = {f"c{i}": 1.0 for i in range(20)}
 
-    # Identical runs show no drop, but 20 cases could have missed one.
     assert paired_bootstrap(same, same, seed=0, margin=0).decision is Decision.NEEDS_MORE_EVIDENCE
     assert paired_bootstrap(same, noisy, seed=0, margin=0).decision is Decision.NEEDS_MORE_EVIDENCE
     assert paired_bootstrap(same, better, seed=0, margin=0).decision is Decision.PASS
 
 
 def test_a_regression_hidden_in_cases_the_eval_never_drew() -> None:
-    # The study in studies/validation found this. A change broke 4 of 100 questions and a
-    # 20 case eval drew none of them, so every difference is zero and the interval is [0, 0].
-    # That used to pass a margin of 0.02 although the real drop is 0.04.
+    # A change broke 4 of 100 questions and a 20 case eval drew none of them, so every
+    # difference is zero and the bootstrap interval is [0, 0]. That used to pass 0.02.
     sample = {f"c{i}": 1.0 if i < 5 else 0.0 for i in range(20)}
 
     result = paired_bootstrap(sample, sample, seed=0, margin=0.02)
@@ -208,8 +205,9 @@ def test_a_regression_hidden_in_cases_the_eval_never_drew() -> None:
     assert result.largest_drop_not_ruled_out > 0.04
 
 
-def test_enough_cases_pass_a_margin_and_one_fewer_does_not() -> None:
+def test_cases_needed_is_the_count_for_an_unchanged_eval() -> None:
     needed = cases_needed(0.02)
+    assert needed is not None
 
     def decide(n: int) -> Decision | None:
         same = {f"c{i}": float(i % 2) for i in range(n)}
@@ -217,25 +215,29 @@ def test_enough_cases_pass_a_margin_and_one_fewer_does_not() -> None:
 
     assert decide(needed) is Decision.PASS
     assert decide(needed - 1) is Decision.NEEDS_MORE_EVIDENCE
+    # It is not a floor for every eval: 20 clear gains pass the same margin.
+    gains = paired_bootstrap(
+        {f"c{i}": 0.0 for i in range(20)}, {f"c{i}": 1.0 for i in range(20)}, margin=0.02
+    )
+    assert gains.decision is Decision.PASS
 
 
 @pytest.mark.parametrize(
     ("margin", "kwargs", "expected"),
     [
-        (0.02, {}, 183),
-        (0.05, {}, 72),
-        (0.1, {}, 36),
-        (0.05, {"confidence": 0.9}, 59),
-        (5.0, {"max_case_drop": 100.0}, 72),
-        (1.0, {}, 1),
+        (0.02, {}, 249),
+        (0.05, {}, 98),
+        (0.1, {}, 48),
+        (5.0, {"max_case_drop": 100.0}, 98),
+        (2.0, {}, 1),
     ],
 )
 def test_cases_needed(margin: float, kwargs: dict[str, float], expected: int) -> None:
     assert cases_needed(margin, **kwargs) == expected
 
 
-def test_no_number_of_cases_passes_a_zero_margin() -> None:
-    with pytest.raises(ValueError, match="margin of 0 never passes"):
+def test_an_unchanged_eval_never_passes_a_zero_margin() -> None:
+    with pytest.raises(ValueError, match="never passes 0"):
         cases_needed(0)
 
 
@@ -287,7 +289,7 @@ def test_bad_score_ranges_are_refused(bad: tuple[float, float]) -> None:
 def test_two_losses_from_an_even_population_are_not_a_regression() -> None:
     # The review that found this: half the cases go 1 -> 0, half go 0 -> 1, so nothing
     # changed on average. Two cases drawn are both losses a quarter of the time, and the
-    # interval was [-1, -1], a regression and a fail.
+    # bootstrap interval is [-1, -1].
     result = paired_bootstrap({"a": 1, "b": 1}, {"a": 0, "b": 0}, seed=0, margin=0.02)
 
     assert (result.ci_low, result.ci_high) == (-1, -1)
@@ -295,21 +297,65 @@ def test_two_losses_from_an_even_population_are_not_a_regression() -> None:
     assert result.decision is Decision.NEEDS_MORE_EVIDENCE
 
 
-@pytest.mark.parametrize("n", [2, 5, 10, 20])
-def test_false_failures_on_an_even_population_stay_rare(n: int) -> None:
-    # A one-sided 95% bound should be wrong at most 2.5% of the time. 400 trials leave about
-    # a point of sampling noise, so allow 3.5%. Before the bounds, two cases failed 25%.
-    rng = np.random.default_rng(n)
-    trials = 400
-    fails = 0
-    for t in range(trials):
-        won = rng.integers(0, 2, size=n).astype(float)
-        result = paired_bootstrap(
-            run(list(won)), run(list(1 - won)), seed=t, n_resamples=1_000, margin=0.02
-        )
-        fails += result.decision is Decision.FAIL or result.verdict is Verdict.REGRESSION
+def test_six_losses_and_one_gain_are_not_a_fail() -> None:
+    # The second review found this one. The rule-of-three bounds fell back to the bootstrap
+    # once both extremes were seen, and failed it, which happens 6.25% of the time with
+    # seven cases when nothing changed.
+    base = {f"c{i}": 1.0 for i in range(6)} | {"c6": 0.0}
+    cand = {f"c{i}": 0.0 for i in range(6)} | {"c6": 1.0}
 
-    assert fails / trials <= 0.035
+    for seed in range(5):
+        result = paired_bootstrap(base, cand, seed=seed, margin=0.02)
+        assert result.decision is Decision.NEEDS_MORE_EVIDENCE
+
+
+def exact_error_rate(
+    outcomes: dict[float, float], n: int, wrong: Callable[[npt.NDArray[np.float64]], bool]
+) -> float:
+    """The exact chance that wrong() holds, over every sequence of n draws from outcomes.
+
+    outcomes maps a value on the [0, 1] betting scale to its probability.
+    """
+    total = 0.0
+    for draw in itertools.product(outcomes, repeat=n):
+        if wrong(np.array(draw)):
+            total += math.prod(outcomes[v] for v in draw)
+    return total
+
+
+# Margin 0.02 on differences between -1 and 1 is 0.01 on the [0, 1] betting scale.
+FAIL_POINT = 0.5 - 0.01
+
+
+def fails(x: npt.NDArray[np.float64]) -> bool:
+    """The decision is fail: the whole interval sits below -margin."""
+    return bool(x.mean() < FAIL_POINT and rejects(x, FAIL_POINT, 0.05))
+
+
+def passes(x: npt.NDArray[np.float64]) -> bool:
+    """The decision is pass: the whole interval sits at or above -margin."""
+    return bool(x.mean() > FAIL_POINT and rejects(x, FAIL_POINT, 0.05))
+
+
+@pytest.mark.parametrize("n", range(1, 13))
+def test_exact_false_fails_when_nothing_changed(n: int) -> None:
+    # Every sequence of every size from 1 to 12, not a sample. Half the cases lose and half
+    # gain, so the true change is zero and any fail is wrong. A 95% interval allows 2.5%.
+    even = {0.0: 0.5, 1.0: 0.5}
+    sparse = {0.0: 0.1, 0.5: 0.8, 1.0: 0.1}
+
+    assert exact_error_rate(even, n, fails) <= 0.025
+    if n <= 8:
+        assert exact_error_rate(sparse, n, fails) <= 0.025
+
+
+@pytest.mark.parametrize("n", range(1, 13))
+def test_exact_false_passes_when_a_few_cases_broke(n: int) -> None:
+    # A change broke 4% of cases outright, a drop of 0.04, twice the margin. Any pass is
+    # wrong. Small evals usually draw none of the broken cases, which fooled the bootstrap.
+    broke = {0.5: 0.96, 0.0: 0.04}
+
+    assert exact_error_rate(broke, n, passes) <= 0.025
 
 
 def test_missing_cases_count_as_anything_they_could_have_been() -> None:
@@ -328,8 +374,8 @@ def test_missing_cases_count_as_anything_they_could_have_been() -> None:
 
 
 def test_tiny_margins_do_not_crash() -> None:
-    # 1 - 1e-20 is exactly 1 in floating point, and log(1) is 0.
-    assert cases_needed(1e-20) > 10**20
+    # This used to divide by log(1 - 1e-20), which is 0 in floating point.
+    assert cases_needed(1e-20) is None
 
 
 @pytest.mark.parametrize("margin", [-0.01, float("nan"), float("inf")])

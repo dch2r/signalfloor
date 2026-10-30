@@ -1,20 +1,21 @@
 import type { Comparison } from "@/lib/api";
-import { formatCount, formatDelta, formatPercent, formatScore } from "@/lib/format";
+import { formatCount, formatDelta, formatScore } from "@/lib/format";
 import { axisExtent, toPercent } from "@/lib/interval";
 
 // The interval comes from resampling the eval's cases. It shows how much the result depends on
 // which cases happen to be in the eval set. It is not a measure of run to run noise. The bounds
-// widen it for cases the eval may have missed, and the verdict comes from the bounds.
-// Statistical evidence, not certainty, so the wording never says proven.
+// are a confidence interval by betting, which holds at any sample size, and the verdict and
+// decision come from them. Statistical evidence, not certainty, so the wording never says
+// proven.
 const VERDICTS: Record<string, { title: string; text: string; tone: string }> = {
   regression: {
     title: "Regression",
-    text: "The candidate is likely worse. Even widened for cases the eval may have missed, the bounds sit below zero.",
+    text: "The candidate is likely worse. The bounds, which hold even for small evals, sit below zero.",
     tone: "border-bad/50 bg-bad/10",
   },
   improvement: {
     title: "Improvement",
-    text: "The candidate is likely better. Even widened for cases the eval may have missed, the bounds sit above zero.",
+    text: "The candidate is likely better. The bounds, which hold even for small evals, sit above zero.",
     tone: "border-good/50 bg-good/10",
   },
   inconclusive: {
@@ -81,10 +82,10 @@ export function VerdictBanner({ comparison }: { comparison: Comparison }) {
         comparison.cases_needed != null &&
         comparison.n_cases < comparison.cases_needed && (
           <p data-testid="cases-needed" className="mt-1 text-sm">
-            A margin of {margin} needs at least{" "}
-            <strong className="font-mono">{comparison.cases_needed}</strong> cases, even when nothing
-            changed. With {comparison.n_cases}, a change that broke{" "}
-            {formatPercent(comparison.unseen_share)} of cases could miss every one of them.
+            When nothing changes, a margin of {margin} needs at least{" "}
+            <strong className="font-mono">{comparison.cases_needed}</strong> cases. With{" "}
+            {comparison.n_cases}, even an unchanged eval can&apos;t rule out a drop of{" "}
+            {formatScore(comparison.no_change_drop)}.
           </p>
         )}
 
@@ -93,12 +94,12 @@ export function VerdictBanner({ comparison }: { comparison: Comparison }) {
         <Stat label="Candidate mean" value={formatScore(comparison.candidate_mean)} />
         <Stat label="Change" value={formatDelta(comparison.delta)} />
         <Stat
-          label={`${percent}% interval`}
+          label={`${percent}% bootstrap interval`}
           value={`${formatDelta(comparison.ci_low)} to ${formatDelta(comparison.ci_high)}`}
         />
       </dl>
       <p className="mt-2 text-sm text-muted">
-        Bounds, widened for cases the eval may have missed:{" "}
+        {percent}% bounds, which the verdict uses and which hold at any sample size:{" "}
         <span data-testid="bounds" className="font-mono">
           {formatDelta(comparison.bound_low)} to {formatDelta(comparison.bound_high)}
         </span>

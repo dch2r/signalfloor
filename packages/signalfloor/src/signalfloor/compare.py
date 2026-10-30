@@ -11,35 +11,24 @@ Two answers come out, kept apart on purpose:
 - The decision is a release policy, and only exists when you give a margin: the largest drop
   you will accept. It passes only when the data shows any drop is smaller than that.
 
-Both come from bounds, not straight from the bootstrap interval. The bootstrap only knows
-the differences it was given. If a change breaks a few percent of all cases, a small eval can
-easily contain none of them, every difference is zero, and the interval shrinks to nothing.
-Two cases that both got worse give an interval of [-1, -1] the same way. So the bounds widen
-the interval for cases the eval may have missed. If a share p of all cases had changed, an
-eval of n cases would show none of them with chance (1 - p) ** n. The largest p that still
-happens often enough is 1 - alpha ** (1 / n), close to 3.7 / n at 95% (the rule of three).
+Both come from bounds, not from the bootstrap interval. A percentile bootstrap only reaches
+its stated coverage as samples grow. On small or lopsided samples it can be badly wrong: two
+cases that both got worse give an interval of [-1, -1], and an eval that happens to contain
+none of the cases a change broke gives [0, 0]. The bounds are a confidence interval by
+betting (see _betting.py), which holds at every sample size for independently drawn cases
+with scores in a known range. The bootstrap interval is still reported, as a quick
+description of the data, but no call is made from it.
 
-Those unseen cases only matter where they could lie beyond what was seen. A difference the
-eval already contains is in the bootstrap, which resamples it. So the lower bound moves down
-by p times the gap between the lowest difference seen and the lowest possible one, and the
-upper bound moves up by p times the gap at the top. When the eval saw both the worst and the
-best possible difference, the bounds are the interval.
-
-This needs to know the score range, so scores must lie in a stated range, 0 to 1 unless you
-say otherwise. It is never guessed from the scores seen: a sample where every score is 100.5
+That needs the score range, so scores must lie in a stated range, 0 to 1 unless you say
+otherwise. It is never guessed from the scores seen: a sample where every score is 100.5
 says nothing about how far a score can fall.
 
 Cases that one run has and the other lacks can also be counted, as missing cases. Each could
-be anything in the score range, so they widen the bounds the same way.
-
-The widening is a safeguard checked by simulation (see studies/validation), not an exact
-coverage guarantee.
+be anything in the score range, so they widen the bounds by their share of the suite.
 """
 
 from __future__ import annotations
 
-import dataclasses
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -47,6 +36,7 @@ from enum import StrEnum
 import numpy as np
 import numpy.typing as npt
 
+from signalfloor._betting import betting_interval, no_change_half_width
 from signalfloor._pairing import PairingError, examples, shared_case_ids
 from signalfloor._resample import resample_chunks
 
@@ -76,52 +66,59 @@ class Comparison:
     verdict: Verdict
     margin: float | None = None
     decision: Decision | None = None
-    # The share of all cases that could have changed without one showing up in this eval.
-    unseen_share: float = 0.0
+    # The confidence interval by betting, widened for missing cases. Calls come from these.
+    bound_low: float = 0.0
+    bound_high: float = 0.0
     # How far one case's score can move: the width of the score range.
     max_case_drop: float = 1.0
     # Cases in one run only. Each could be anywhere in the score range.
     missing_cases: int = 0
-    # The lowest and highest difference seen, candidate minus baseline.
-    min_diff: float = 0.0
-    max_diff: float = 0.0
-
-    @property
-    def bound_low(self) -> float:
-        """The lowest change in mean the data allows, counting unseen and missing cases."""
-        gap = self.min_diff + self.max_case_drop
-        return self._with_missing(self.ci_low - self.unseen_share * gap, -self.max_case_drop)
-
-    @property
-    def bound_high(self) -> float:
-        """The highest change in mean the data allows, counting unseen and missing cases."""
-        gap = self.max_case_drop - self.max_diff
-        return self._with_missing(self.ci_high + self.unseen_share * gap, self.max_case_drop)
 
     @property
     def largest_drop_not_ruled_out(self) -> float:
         """How large a drop the data still allows. Zero when even the lower bound is a gain."""
         return max(0.0, -self.bound_low)
 
-    def _with_missing(self, seen: float, extreme: float) -> float:
-        total = self.n_cases + self.missing_cases
-        return (self.n_cases * seen + self.missing_cases * extreme) / total
+    @property
+    def no_change_drop(self) -> float:
+        """The drop this many cases can't rule out even when every difference is zero."""
+        return no_change_drop(self.n_cases, self.confidence, self.max_case_drop)
 
 
-def cases_needed(margin: float, *, confidence: float = 0.95, max_case_drop: float = 1.0) -> int:
-    """The fewest cases that can pass a margin even when nothing changed.
+def no_change_drop(n: int, confidence: float = 0.95, max_case_drop: float = 1.0) -> float:
+    """The drop an eval of n cases can't rule out even when nothing changed at all."""
+    return 2 * max_case_drop * no_change_half_width(n, 1 - confidence)
 
-    Below this, a change that broke a share margin / max_case_drop of all cases would too
-    often leave no trace in the eval. Raises ValueError for a margin of zero, which no number
-    of cases can pass.
+
+# Past this, cases_needed stops searching. The search costs time proportional to the count.
+MAX_CASES_SEARCHED = 1_000_000
+
+
+def cases_needed(
+    margin: float, *, confidence: float = 0.95, max_case_drop: float = 1.0
+) -> int | None:
+    """The fewest cases that pass a margin when nothing changed, or None past a million.
+
+    This is the count for the case where every difference is exactly zero. An eval with a
+    clear improvement can pass with fewer, and one with any losses needs more. Raises
+    ValueError for a margin of zero, which an unchanged eval never passes.
     """
     if not margin > 0:
-        raise ValueError("no number of cases rules out every drop, so a margin of 0 never passes")
-    if margin >= max_case_drop:
+        raise ValueError("an unchanged eval can't rule out every drop, so it never passes 0")
+    if no_change_drop(1, confidence, max_case_drop) <= margin:
         return 1
-    alpha = (1 - confidence) / 2
-    # log1p keeps tiny margins from rounding 1 - margin to exactly 1.
-    return math.ceil(math.log(alpha) / math.log1p(-margin / max_case_drop))
+    low, high = 1, 2
+    while no_change_drop(high, confidence, max_case_drop) > margin:
+        if high >= MAX_CASES_SEARCHED:
+            return None
+        low, high = high, min(high * 2, MAX_CASES_SEARCHED)
+    while high - low > 1:
+        middle = (low + high) // 2
+        if no_change_drop(middle, confidence, max_case_drop) > margin:
+            low = middle
+        else:
+            high = middle
+    return high
 
 
 def paired_bootstrap(
@@ -142,12 +139,11 @@ def paired_bootstrap(
     whole interval sits below zero the candidate is worse, if it sits above zero it is
     better, and if it contains zero the data can't tell.
 
-    The verdict and decision use the bounds, the interval widened for cases the eval may
-    have missed (see the module docstring). With a margin m, the decision is fail when the
-    upper bound is below -m, pass when the lower bound is at or above -m, and needs more
-    evidence otherwise. Passing needs enough cases as well as a narrow interval: see
-    cases_needed. A margin of zero passes only an improvement large enough to outweigh the
-    cases the eval may have missed. Pick the largest drop you can live with.
+    The verdict and decision use the bounds, a confidence interval by betting (see the module
+    docstring). With a margin m, the decision is fail when the upper bound is below -m, pass
+    when the lower bound is at or above -m, and needs more evidence otherwise. Passing needs
+    enough cases as well as a clear result: see cases_needed. Pick the largest drop you can
+    live with.
 
     Every score must lie in score_range. missing_cases counts cases of the suite that only
     one of the runs has.
@@ -183,24 +179,12 @@ def paired_bootstrap(
     alpha = 1 - confidence
     ci_low, ci_high = np.quantile(resampled_means, [alpha / 2, 1 - alpha / 2])
 
-    result = Comparison(
-        baseline_mean=float(base.mean()),
-        candidate_mean=float(cand.mean()),
-        delta=float(diffs.mean()),
-        ci_low=float(ci_low),
-        ci_high=float(ci_high),
-        confidence=confidence,
-        n_cases=n,
-        n_resamples=n_resamples,
-        verdict=Verdict.INCONCLUSIVE,
-        margin=margin,
-        unseen_share=1 - (alpha / 2) ** (1 / n),
-        max_case_drop=highest - lowest,
-        missing_cases=missing_cases,
-        min_diff=float(np.min(diffs)),
-        max_diff=float(np.max(diffs)),
-    )
-    low, high = result.bound_low, result.bound_high
+    # Differences lie between -width and +width. The betting interval needs [0, 1].
+    width = highest - lowest
+    seen_low, seen_high = betting_interval((diffs + width) / (2 * width), alpha)
+    total = n + missing_cases
+    low = (n * (2 * width * seen_low - width) - missing_cases * width) / total
+    high = (n * (2 * width * seen_high - width) + missing_cases * width) / total
     if high < 0:
         verdict = Verdict.REGRESSION
     elif low > 0:
@@ -216,7 +200,23 @@ def paired_bootstrap(
             decision = Decision.PASS
         else:
             decision = Decision.NEEDS_MORE_EVIDENCE
-    return dataclasses.replace(result, verdict=verdict, decision=decision)
+    return Comparison(
+        baseline_mean=float(base.mean()),
+        candidate_mean=float(cand.mean()),
+        delta=float(diffs.mean()),
+        ci_low=float(ci_low),
+        ci_high=float(ci_high),
+        confidence=confidence,
+        n_cases=n,
+        n_resamples=n_resamples,
+        verdict=verdict,
+        margin=margin,
+        decision=decision,
+        bound_low=low,
+        bound_high=high,
+        max_case_drop=width,
+        missing_cases=missing_cases,
+    )
 
 
 def _paired_arrays(
@@ -242,4 +242,12 @@ def _bootstrap_means(
     return means
 
 
-__all__ = ["Comparison", "Decision", "PairingError", "Verdict", "cases_needed", "paired_bootstrap"]
+__all__ = [
+    "Comparison",
+    "Decision",
+    "PairingError",
+    "Verdict",
+    "cases_needed",
+    "no_change_drop",
+    "paired_bootstrap",
+]

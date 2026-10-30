@@ -240,9 +240,8 @@ def _to_json(result: Comparison | Agreement | Stability) -> str:
     data = dataclasses.asdict(result)
     if isinstance(result, Comparison):
         # Properties, which asdict leaves out.
-        data["bound_low"] = result.bound_low
-        data["bound_high"] = result.bound_high
         data["largest_drop_not_ruled_out"] = result.largest_drop_not_ruled_out
+        data["no_change_drop"] = result.no_change_drop
     return json.dumps(data, indent=2)
 
 
@@ -252,9 +251,9 @@ def _format_compare(r: Comparison) -> str:
         f"cases       {r.n_cases}",
         f"baseline    {r.baseline_mean:.4f}",
         f"candidate   {r.candidate_mean:.4f}",
-        f"change      {r.delta:+.4f}  ({level} CI {r.ci_low:+.4f} to {r.ci_high:+.4f})",
+        f"change      {r.delta:+.4f}  (bootstrap {level} CI {r.ci_low:+.4f} to {r.ci_high:+.4f})",
         f"bounds      {r.bound_low:+.4f} to {r.bound_high:+.4f}  "
-        "(the interval widened for cases the eval may have missed)",
+        f"({level} at any sample size, the calls below use these)",
         "",
         f"verdict     {_VERDICT_TEXT[r.verdict]}",
     ]
@@ -263,19 +262,21 @@ def _format_compare(r: Comparison) -> str:
         lines.append(f"            the data can't rule out a drop of up to {drop:.4f}")
     if r.decision is not None and r.margin is not None:
         lines.append(f"decision    {_DECISION_TEXT[r.decision]} (margin {r.margin:g})")
-        unseen = r.unseen_share * r.max_case_drop
-        if r.decision is Decision.NEEDS_MORE_EVIDENCE and unseen > r.margin:
-            lines += [
-                f"            {r.n_cases} cases can't rule out a drop of {unseen:.4f} even if "
-                "nothing changed:",
-                f"            a change that broke {r.unseen_share:.1%} of cases could miss "
-                "every one of them",
-            ]
+        floor = r.no_change_drop
+        if r.decision is Decision.NEEDS_MORE_EVIDENCE and floor > r.margin:
+            lines.append(
+                f"            {r.n_cases} cases can't rule out a drop of {floor:.4f} even if "
+                "nothing changed"
+            )
             if r.margin > 0:
                 needed = cases_needed(
                     r.margin, confidence=r.confidence, max_case_drop=r.max_case_drop
                 )
-                lines.append(f"            a margin of {r.margin:g} needs at least {needed} cases")
+                count = f"at least {needed}" if needed else "more than a million"
+                lines.append(
+                    f"            when nothing changes, a margin of {r.margin:g} needs {count} "
+                    "cases"
+                )
     elif r.verdict is Verdict.INCONCLUSIVE:
         lines.append("            set --margin to the largest drop you accept to get a decision")
     return "\n".join(lines)

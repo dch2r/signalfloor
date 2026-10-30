@@ -932,10 +932,6 @@
             "type": "number",
             "title": "Largest Drop Not Ruled Out"
           },
-          "unseen_share": {
-            "type": "number",
-            "title": "Unseen Share"
-          },
           "max_case_drop": {
             "type": "number",
             "title": "Max Case Drop"
@@ -944,13 +940,9 @@
             "type": "integer",
             "title": "Missing Cases"
           },
-          "min_diff": {
+          "no_change_drop": {
             "type": "number",
-            "title": "Min Diff"
-          },
-          "max_diff": {
-            "type": "number",
-            "title": "Max Diff"
+            "title": "No Change Drop"
           },
           "margin": {
             "anyOf": [
@@ -1002,11 +994,9 @@
           "bound_low",
           "bound_high",
           "largest_drop_not_ruled_out",
-          "unseen_share",
           "max_case_drop",
           "missing_cases",
-          "min_diff",
-          "max_diff"
+          "no_change_drop"
         ],
         "title": "ComparisonOut"
       },

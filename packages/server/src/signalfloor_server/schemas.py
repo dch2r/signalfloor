@@ -64,21 +64,19 @@ class ComparisonOut(BaseModel):
     # regression, improvement or inconclusive, from the bounds. Inconclusive means the bounds
     # contain zero, not that nothing changed.
     verdict: str
-    # The interval widened for cases the eval may have missed and for missing cases.
+    # The confidence interval by betting, valid at any sample size, widened for missing cases.
+    # The verdict and decision come from these, not from ci_low and ci_high.
     bound_low: float
     bound_high: float
     # The drop the data can't rule out: minus bound_low, or zero.
     largest_drop_not_ruled_out: float
-    # The share of all cases that could have changed without one showing up in this eval, how
-    # far one case's score can move, and how many cases only one run has.
-    unseen_share: float
+    # How far one case's score can move, and how many cases only one run has.
     max_case_drop: float
     missing_cases: int
-    # The lowest and highest difference seen. The bounds widen only beyond these.
-    min_diff: float
-    max_diff: float
+    # The drop this many cases can't rule out even when nothing changed.
+    no_change_drop: float
     # Only with a margin: pass, fail or needs_more_evidence, and the fewest cases that can pass
-    # that margin when nothing changed. Null for a margin of zero, which no count can pass.
+    # that margin when nothing changed. Null for a margin of zero, or past a million cases.
     margin: float | None = None
     decision: str | None = None
     cases_needed: int | None = None
