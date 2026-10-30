@@ -265,7 +265,7 @@ exits with code 1 when more than 5% of cases are flaky. Change that with `--max-
 Add a step after the job that produces your eval results:
 
 ```yaml
-- uses: dch2r/signalfloor@v0.4.0
+- uses: dch2r/signalfloor@v0.5.0
   with:
     command: compare
     files: evals/baseline.jsonl evals/candidate.jsonl
