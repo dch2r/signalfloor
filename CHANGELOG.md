@@ -6,6 +6,17 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The betting interval stopped its search at 1e-9 and 1 - 1e-9, so data that was all 0 got
+  an interval that left out 0, and a total drop of 1 passed a margin of 0.999999999. An end
+  that can't be rejected is now reported exactly, and rounding only ever widens the interval.
+- The server worked out the cases a margin needs on the event loop. For a tiny margin that
+  took seconds and stalled every other request. The whole report now runs in a worker
+  thread, and `cases_needed` and `no_change_drop` are cached.
+- The agent's unit tests could reach the network. They now fail at once on any name lookup
+  or connection, and the tests that did reach out stub the model server instead.
+
 ## [0.5.0] - 2026-10-29
 
 ### Changed

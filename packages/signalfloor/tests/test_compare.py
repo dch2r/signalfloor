@@ -384,3 +384,33 @@ def test_bad_margins_are_rejected(margin: float) -> None:
 
     with pytest.raises(ValueError, match="margin"):
         paired_bootstrap(same, same, margin=margin)
+
+
+@pytest.mark.parametrize(("value", "end"), [(0.0, 0), (1.0, 1)])
+def test_constant_data_keeps_its_exact_end(value: float, end: int) -> None:
+    # The fourth review found the search stopping at 1e-9 and 1 - 1e-9, which left a
+    # population that is always 0 out of its own interval.
+    from signalfloor._betting import betting_interval
+
+    low, high = betting_interval(np.full(10, value), 0.05)
+
+    assert (low, high)[end] == value
+    assert low <= value <= high
+
+
+def test_a_total_drop_never_passes_a_margin_just_under_it() -> None:
+    worst = paired_bootstrap({"a": 1.0, "b": 1.0}, {"a": 0.0, "b": 0.0}, margin=0.999999999)
+    all_of_it = paired_bootstrap({"a": 1.0, "b": 1.0}, {"a": 0.0, "b": 0.0}, margin=1.0)
+
+    assert worst.bound_low == -1
+    assert worst.decision is not Decision.PASS
+    assert all_of_it.decision is Decision.PASS
+
+
+def test_the_case_count_is_cached() -> None:
+    cases_needed.cache_clear()
+
+    cases_needed(0.02)
+    cases_needed(0.02)
+
+    assert cases_needed.cache_info().hits == 1

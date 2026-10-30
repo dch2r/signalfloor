@@ -431,3 +431,28 @@ def test_negative_margin_is_rejected(client: TestClient) -> None:
     run_id = upload(client)["id"]
 
     assert client.get(f"/runs/{run_id}/compare/{run_id}", params={"margin": -1}).status_code == 422
+
+
+def test_the_case_count_search_runs_off_the_event_loop(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fourth review measured cases_needed(1e-20) at 1.8 seconds, on the request thread,
+    # which would stall every other request. anyio.from_thread only works in a worker thread.
+    import anyio.from_thread
+
+    from signalfloor_server import comparisons
+
+    calls: list[float] = []
+
+    def needed(margin: float, **kwargs: float) -> int:
+        anyio.from_thread.check_cancelled()
+        calls.append(margin)
+        return 7
+
+    monkeypatch.setattr(comparisons, "cases_needed", needed)
+    run_id = upload(client, "same", [1.0, 0.0] * 10)["id"]
+
+    result = client.get(f"/runs/{run_id}/compare/{run_id}", params={"margin": 1e-20}).json()
+
+    assert calls == [1e-20]
+    assert result["cases_needed"] == 7

@@ -29,6 +29,7 @@ be anything in the score range, so they widen the bounds by their share of the s
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -85,6 +86,7 @@ class Comparison:
         return no_change_drop(self.n_cases, self.confidence, self.max_case_drop)
 
 
+@functools.lru_cache(maxsize=4096)
 def no_change_drop(n: int, confidence: float = 0.95, max_case_drop: float = 1.0) -> float:
     """The drop an eval of n cases can't rule out even when nothing changed at all."""
     return 2 * max_case_drop * no_change_half_width(n, 1 - confidence)
@@ -94,6 +96,7 @@ def no_change_drop(n: int, confidence: float = 0.95, max_case_drop: float = 1.0)
 MAX_CASES_SEARCHED = 1_000_000
 
 
+@functools.lru_cache(maxsize=1024)
 def cases_needed(
     margin: float, *, confidence: float = 0.95, max_case_drop: float = 1.0
 ) -> int | None:

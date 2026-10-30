@@ -16,13 +16,14 @@ import os
 import uuid
 from collections import OrderedDict
 from functools import partial
+from typing import Any
 
 import anyio
 from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from signalfloor.compare import cases_needed, paired_bootstrap
+from signalfloor.compare import Comparison, cases_needed, paired_bootstrap
 from signalfloor_server.models import CaseResult, Run
 from signalfloor_server.schemas import CaseDiff, ComparisonOut, RunDiffOut
 
@@ -75,10 +76,11 @@ async def compare(
         missing = len(baseline.keys() | candidate.keys()) - len(shared)
         baseline = {k: v for k, v in baseline.items() if k in shared}
         candidate = {k: v for k, v in candidate.items() if k in shared}
-    # CPU bound, so it runs in a thread to keep the event loop free, and through the limiter.
-    result = await anyio.to_thread.run_sync(
+    # All of it is CPU bound, the case count search included, so it runs in a thread to keep
+    # the event loop free, and through the limiter.
+    result, no_change, needed = await anyio.to_thread.run_sync(
         partial(
-            paired_bootstrap,
+            _report,
             baseline,
             candidate,
             confidence=confidence,
@@ -107,20 +109,34 @@ async def compare(
         largest_drop_not_ruled_out=result.largest_drop_not_ruled_out,
         max_case_drop=result.max_case_drop,
         missing_cases=result.missing_cases,
-        no_change_drop=result.no_change_drop,
+        no_change_drop=no_change,
         margin=result.margin,
         decision=result.decision.value if result.decision else None,
-        cases_needed=(
-            cases_needed(margin, confidence=confidence, max_case_drop=result.max_case_drop)
-            if margin
-            else None
-        ),
+        cases_needed=needed,
     )
     if seed is not None:
         _cache[key] = comparison
         if len(_cache) > CACHE_SIZE:
             _cache.popitem(last=False)
     return comparison
+
+
+def _report(
+    baseline: dict[str, float],
+    candidate: dict[str, float],
+    *,
+    margin: float | None,
+    **options: Any,
+) -> tuple[Comparison, float, int | None]:
+    """The comparison, the drop an unchanged eval of its size can't rule out, and the cases
+    an unchanged eval needs for the margin. Slow enough that it all belongs off the loop."""
+    result = paired_bootstrap(baseline, candidate, margin=margin, **options)
+    needed = None
+    if margin:
+        needed = cases_needed(
+            margin, confidence=result.confidence, max_case_drop=result.max_case_drop
+        )
+    return result, result.no_change_drop, needed
 
 
 async def scores(session: AsyncSession, run_id: uuid.UUID) -> dict[str, float]:

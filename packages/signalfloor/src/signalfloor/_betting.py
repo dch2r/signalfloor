@@ -45,7 +45,7 @@ def betting_interval(x: npt.NDArray[np.float64], alpha: float) -> tuple[float, f
         # Not seen in testing, but if the mean itself were rejected the interval would be
         # empty. Report the mean alone rather than invent a range.
         return center, center
-    return _edge(rejected, center, _EDGE), _edge(rejected, center, 1 - _EDGE)
+    return _edge(rejected, center, 0.0), _edge(rejected, center, 1.0)
 
 
 def rejects(x: npt.NDArray[np.float64], m: float, alpha: float) -> bool:
@@ -76,7 +76,11 @@ def _bet_sizes(data: npt.NDArray[np.float64], alpha: float) -> npt.NDArray[np.fl
 
 
 def _log_wealth(data: npt.NDArray[np.float64], bets: npt.NDArray[np.float64], m: float) -> float:
-    """log of the two bets' combined wealth against mean m, averaged over the orderings."""
+    """log of the two bets' combined wealth against mean m, averaged over the orderings.
+
+    At m of exactly 0 or 1 the bet size limit divides by zero, so m is moved in by a hair for
+    the arithmetic. The interval's ends are still reported exactly (see _edge).
+    """
     m = min(max(m, _EDGE), 1 - _EDGE)
     gap = data - m
     up = np.log1p(np.minimum(bets, _RISK / m) * gap).sum(axis=1)
@@ -88,7 +92,12 @@ def _log_wealth(data: npt.NDArray[np.float64], bets: npt.NDArray[np.float64], m:
 
 
 def _edge(rejected: Callable[[float], bool], inside: float, outside: float) -> float:
-    """Bisect for where the interval ends between a kept point and a far end."""
+    """Bisect for where the interval ends between a kept point and a far end.
+
+    A far end that can't be rejected is part of the interval, and is returned exactly: data
+    that is all 0 must keep 0. Otherwise the result is the rejected side of the last step, so
+    rounding only ever widens the interval.
+    """
     if not rejected(outside):
         return outside
     for _ in range(50):
@@ -97,7 +106,7 @@ def _edge(rejected: Callable[[float], bool], inside: float, outside: float) -> f
             outside = mid
         else:
             inside = mid
-    return inside
+    return outside
 
 
 def no_change_half_width(n: int, alpha: float) -> float:
@@ -108,5 +117,5 @@ def no_change_half_width(n: int, alpha: float) -> float:
     data = np.full((1, n), 0.5)
     bets = _bet_sizes(data, alpha)
     threshold = math.log(1 / alpha)
-    low = _edge(lambda m: _log_wealth(data, bets, m) >= threshold, 0.5, _EDGE)
+    low = _edge(lambda m: _log_wealth(data, bets, m) >= threshold, 0.5, 0.0)
     return 0.5 - low
