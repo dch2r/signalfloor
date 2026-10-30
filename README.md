@@ -36,7 +36,7 @@ signalfloor compares two eval runs and tells you if the difference is real.
 **Does it work?** On 180,000 trials with regressions of known size planted into a real
 agent's results, the usual rule, "fail if the mean dropped by more than the margin", shipped
 up to 48% of bad changes and failed up to 42% of good ones on held-out questions. signalfloor
-kept both under 0.3%. The cost is that small evals often get "needs more evidence". The
+kept both at 0.3% or less. The cost is that small evals often get "needs more evidence". The
 [validation study](studies/validation) has every rate, including that one.
 
 ## Install
