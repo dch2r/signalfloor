@@ -93,7 +93,7 @@ reruns move more than your margin, average over several reruns or add cases.
 Fail a pull request on the result with the GitHub Action:
 
 ```yaml
-- uses: dch2r/signalfloor@v0.5.1
+- uses: dch2r/signalfloor@v0.5.2
   with:
     command: compare
     files: evals/baseline.jsonl evals/candidate.jsonl
