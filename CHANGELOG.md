@@ -6,7 +6,36 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** verdicts and decisions now come from a confidence interval by betting
+  (Waudby-Smith and Ramdas, 2024), which holds at any sample size for independent cases with
+  scores in their range. 0.4.0 widened the bootstrap interval by the rule of three, but only
+  past the most extreme differences seen, so once an eval held both a loss and a gain it fell
+  back to the bootstrap: seven cases from a population where nothing changed failed 6.25% of
+  the time. In that population the exact rate is now at most 0.8% for every eval of 1 to
+  14 cases. The bounds are about half again as wide as the bootstrap interval, which is
+  still shown.
+- `cases_needed` is the count that passes a margin when nothing changed, not a minimum for
+  every eval: a clear improvement passes with fewer. It returns None past a million cases.
+  Margins of 0.02 and 0.05 need 249 and 98 cases.
+- The JSON output and the API drop `unseen_share`, `min_diff` and `max_diff`, and add
+  `no_change_drop`, the drop an eval this size can't rule out even when nothing changed.
+- The validation study scores the 0.4.0 rule and the betting rule side by side, down to evals
+  of 10 cases. On held-out questions the betting rule shipped at most 0.3% of bad changes and
+  failed at most 0.3% of acceptable ones, and approved fewer acceptable changes than 0.4.0.
+
+### Fixed
+
+- The agent found no digest for the default embedding model, because Ollama lists
+  `nomic-embed-text` as `nomic-embed-text:latest`. Names without a tag now mean `latest`.
+- The agent treated a digest that was unknown when a run started as unchecked for good, so
+  after one failed lookup any later digest was accepted. Digests now have to match exactly.
+
 ## [0.4.0] - 2026-10-29
+
+Tagged but never published to PyPI. A review found its bounds could still fail an unchanged
+eval of seven cases 6.25% of the time, and 0.5.0 replaces them.
 
 ### Changed
 

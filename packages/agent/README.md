@@ -23,16 +23,19 @@ Hybrid search is often assumed to beat either method alone. Here signalfloor say
 
 ```console
 $ signalfloor compare recall_dense_k2.jsonl recall_hybrid_k2.jsonl
-change      -0.0800  (95% CI -0.1175 to -0.0425)
+change      -0.0800  (bootstrap 95% CI -0.1175 to -0.0425)
+bounds      -0.1359 to -0.0277  (95% at any sample size, the calls below use these)
 verdict     regression
 
 $ signalfloor compare recall_dense_k10.jsonl recall_hybrid_k10.jsonl
-change      +0.0200  (95% CI -0.0025 to +0.0425)
+change      +0.0200  (bootstrap 95% CI -0.0025 to +0.0425)
+bounds      -0.0137 to +0.0551  (95% at any sample size, the calls below use these)
 verdict     inconclusive
 ```
 
 At k=2 hybrid is really worse, because the weaker BM25 ranking pulls good dense results down.
-At k=10 its small lead isn't shown to be real. So the agent uses dense retrieval by default.
+That holds under signalfloor's strictest bounds. At k=10 its small lead isn't shown to be
+real. So the agent uses dense retrieval by default.
 
 Building the dense index for 1,991 passages took about 9.5 minutes on a 2020 Intel MacBook Pro.
 The embeddings are cached, so later runs start in seconds.
@@ -74,11 +77,15 @@ Write this run to a new file, or undo the change.
 ```
 
 Asking for more questions is allowed, as long as the questions already run are unchanged.
-Things it can't catch: a model server that reports no digest can swap weights behind the same
-name, and anything outside the agent's code, such as a library upgrade, isn't hashed. The
-embedding cache is keyed by the embedding model's digest too, so new weights never reuse old
-vectors. That means the first run after this change rebuilds the index once. The result files
-already in `results/` were written before manifests existed.
+Digests must match exactly. If the digest was unknown when a run started, say because the
+lookup failed, a later resume that does know it is refused, since nothing shows the earlier
+results came from the same weights. Things it can't catch: a model server that never reports
+a digest can swap weights behind the same name, and anything outside the agent's code, such
+as a library upgrade, isn't hashed. The embedding cache is keyed by the embedding model's
+digest too, so new weights never reuse old vectors. That means the first run after this
+change rebuilds the index once. The older result files in `results/` were written before
+manifests existed. The `fresh-v1-run*` files have version 1 manifests, from before questions
+were fingerprinted.
 
 ## Tracing
 
@@ -165,17 +172,20 @@ MacBook Pro. v1 was run three times to measure noise. The result files are in
 
 What signalfloor says:
 
-- **v2 really improves F1.** Against each of the three v1 runs the change is +0.084, +0.095 and
-  +0.096, and every 95% interval is above zero.
+- **v2 likely improves F1, but 100 questions can't prove it.** Against each of the three v1
+  runs the change is +0.084, +0.095 and +0.096, and every bootstrap interval is above zero.
+  signalfloor's bounds, which hold at any sample size, reach just below zero (lower ends
+  -0.021, -0.007 and -0.006), so its verdict is inconclusive. More questions would settle it.
 - **The gain is bigger than rerun noise.** Across the three identical v1 runs the mean moved by
   at most 0.013, and only 3 of 100 cases changed score. With only three runs signalfloor puts
   the noise band at +/-0.043, which allows for runs moving together. The v2 gain is about twice
   that. An earlier version assumed cases vary independently and gave +/-0.016, which made the
   gain look five times the noise.
-- **Exact match alone cannot confirm it.** Its change of +0.06 has an interval from -0.02 to
-  +0.14, so F1, which gives partial credit, is the more sensitive metric here.
-- **v2 also made something worse.** Supporting recall dropped by 0.105, interval -0.185 to
-  -0.025, a real regression.
+- **Exact match alone shows even less.** Its change of +0.06 has a bootstrap interval from
+  -0.02 to +0.14, so F1, which gives partial credit, is the more sensitive metric here.
+- **v2 likely made something worse.** Supporting recall dropped by 0.105. The bootstrap
+  interval, -0.185 to -0.025, is below zero. The bounds, -0.230 to +0.013, just reach above
+  it, so this too is likely but not proven on 100 questions.
 
 Looking at the answers explains both results. v1 said yes or no to 49 of the 88 questions
 that were not yes or no questions. v2 did that only 6 times, which is where the gain comes
