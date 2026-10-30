@@ -23,11 +23,9 @@ function comparison(overrides: Partial<Comparison>): Comparison {
     // Made up so the verdict holds. With the real bounds this comparison is inconclusive.
     bound_low: 0.004,
     bound_high: 0.190,
-    unseen_share: 0.036,
     max_case_drop: 1,
     missing_cases: 0,
-    min_diff: -1,
-    max_diff: 1,
+    no_change_drop: 0.048,
     ...overrides,
   };
 }
@@ -50,7 +48,7 @@ describe("VerdictBanner", () => {
     expect(screen.getByText("0.155")).toBeTruthy();
     expect(screen.getByText("0.238")).toBeTruthy();
     expect(screen.getByText("+0.083")).toBeTruthy();
-    expect(screen.getByText("95% interval")).toBeTruthy();
+    expect(screen.getByText("95% bootstrap interval")).toBeTruthy();
     expect(screen.getByText("+0.012 to +0.159")).toBeTruthy();
     expect(screen.getByText(/100 shared cases with 10,000 resamples/)).toBeTruthy();
   });
@@ -99,7 +97,7 @@ describe("VerdictBanner wording", () => {
     const { container } = render(<VerdictBanner comparison={comparison({ verdict: "regression" })} />);
 
     expect(container.textContent).not.toContain("between runs");
-    expect(container.textContent).toContain("cases the eval may have missed");
+    expect(container.textContent).toContain("hold at any sample size");
   });
 
   it("speaks of likelihood, not proof", () => {
@@ -147,13 +145,13 @@ describe("VerdictBanner wording", () => {
   it("says how many cases a margin needs when there are too few", () => {
     render(
       <VerdictBanner
-        comparison={comparison({ margin: 0.02, decision: "needs_more_evidence", cases_needed: 183 })}
+        comparison={comparison({ margin: 0.02, decision: "needs_more_evidence", cases_needed: 249 })}
       />,
     );
 
     expect(screen.getByTestId("cases-needed").textContent).toBe(
-      "A margin of 0.020 needs at least 183 cases, even when nothing changed. " +
-        "With 100, a change that broke 3.6% of cases could miss every one of them.",
+      "When nothing changes, a margin of 0.020 needs at least 249 cases. " +
+        "With 100, even an unchanged eval can't rule out a drop of 0.048.",
     );
   });
 

@@ -388,16 +388,21 @@ def test_compare_with_a_margin(
 
     assert result["decision"] == decision
     assert result["margin"] == margin
-    p = result["unseen_share"]
-    assert p == pytest.approx(1 - 0.025 ** (1 / 100))
     assert result["max_case_drop"] == 1
-    gap_low, gap_high = result["min_diff"] + 1, 1 - result["max_diff"]
-    assert result["bound_low"] == pytest.approx(result["ci_low"] - p * gap_low)
-    assert result["bound_high"] == pytest.approx(result["ci_high"] + p * gap_high)
+    # The bounds come from the library's betting interval, and are wider than the bootstrap's.
+    from signalfloor.compare import paired_bootstrap
+
+    lib = paired_bootstrap(
+        {f"q{i}": s for i, s in enumerate([1.0] * 50 + [0.0] * 50)},
+        {f"q{i}": s for i, s in enumerate([1.0] * 20 + [0.0] * 80)},
+    )
+    assert (result["bound_low"], result["bound_high"]) == (lib.bound_low, lib.bound_high)
+    assert result["bound_low"] < result["ci_low"] < result["ci_high"] < result["bound_high"]
     assert result["largest_drop_not_ruled_out"] == pytest.approx(-result["bound_low"])
+    assert result["no_change_drop"] == pytest.approx(lib.no_change_drop)
 
 
-@pytest.mark.parametrize(("margin", "needed"), [(None, None), (0, None), (0.02, 183), (0.05, 72)])
+@pytest.mark.parametrize(("margin", "needed"), [(None, None), (0, None), (0.02, 249), (0.05, 98)])
 def test_compare_says_how_many_cases_a_margin_needs(
     client: TestClient, margin: float | None, needed: int | None
 ) -> None:

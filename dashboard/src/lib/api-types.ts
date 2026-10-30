@@ -333,16 +333,12 @@ export interface components {
             bound_high: number;
             /** Largest Drop Not Ruled Out */
             largest_drop_not_ruled_out: number;
-            /** Unseen Share */
-            unseen_share: number;
             /** Max Case Drop */
             max_case_drop: number;
             /** Missing Cases */
             missing_cases: number;
-            /** Min Diff */
-            min_diff: number;
-            /** Max Diff */
-            max_diff: number;
+            /** No Change Drop */
+            no_change_drop: number;
             /** Margin */
             margin?: number | null;
             /** Decision */

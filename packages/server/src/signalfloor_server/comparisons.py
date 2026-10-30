@@ -105,11 +105,9 @@ async def compare(
         bound_low=result.bound_low,
         bound_high=result.bound_high,
         largest_drop_not_ruled_out=result.largest_drop_not_ruled_out,
-        unseen_share=result.unseen_share,
         max_case_drop=result.max_case_drop,
         missing_cases=result.missing_cases,
-        min_diff=result.min_diff,
-        max_diff=result.max_diff,
+        no_change_drop=result.no_change_drop,
         margin=result.margin,
         decision=result.decision.value if result.decision else None,
         cases_needed=(
