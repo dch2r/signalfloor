@@ -64,8 +64,9 @@ with a local model. It is used to test signalfloor on real agent output. Two fin
 - Hybrid search looked like the obvious choice, but at top 2 it was a real 8 point recall
   regression against dense search alone, and its small win at top 10 was noise.
 - A new prompt raised F1 by about 9 points, about twice the noise band measured from three
-  identical reruns.
-  It also quietly cut retrieval recall by 10 points, which the headline score hid.
+  identical reruns, and it also cut retrieval recall by 10 points, which the headline score
+  hid. On 100 questions both are likely but not proven: the bootstrap calls them, and
+  signalfloor's bounds, which hold at any sample size, fall just short.
 
 The [agent README](packages/agent/README.md) has the numbers and how to rerun them.
 
@@ -87,20 +88,23 @@ $ signalfloor compare examples/baseline.jsonl examples/candidate-worse.jsonl
 cases       120
 baseline    0.7500
 candidate   0.5833
-change      -0.1667  (95% CI -0.2750 to -0.0583)
-bounds      -0.2750 to -0.0583  (the interval widened for cases the eval may have missed)
+change      -0.1667  (bootstrap 95% CI -0.2750 to -0.0583)
+bounds      -0.3119 to -0.0192  (95% at any sample size, the calls below use these)
 
 verdict     regression
 ```
 
-The interval comes from a paired bootstrap. The bounds widen it for cases the eval may have
-missed, and the verdict comes from the bounds. A bootstrap only knows the differences it was
-given. If a change broke 4 of 100 questions, a 20 question eval misses all of them 44% of
-the time, every difference is zero, and the interval is [0, 0]. If an eval of 2 cases saw two
-losses, the interval is [-1, -1]. So when an eval of n cases has not seen the lowest or the
-highest possible difference, the bounds allow for a share of about 3.7 / n of all cases
-being out there (the rule of three). When it has seen both, as above, the bounds are the
-interval.
+Two intervals are shown. The bootstrap interval is the familiar quick estimate, but it is
+only approximately right, and on small or lopsided evals it can be far off. If a change broke
+4 of 100 questions, a 20 question eval misses all of them 44% of the time, every difference
+is zero, and the bootstrap interval is [0, 0]. Two cases that both got worse give [-1, -1].
+
+So every call comes from the bounds instead: a confidence interval by betting
+([Waudby-Smith and Ramdas, 2024](https://arxiv.org/abs/2010.09686)). It holds at any sample
+size, as long as the cases are drawn independently and scores stay in their range. The tests
+check it by exact enumeration of every possible eval of up to 12 cases. The price is width:
+on the agent's 100 question comparisons the bounds are about half again as wide as the
+bootstrap interval.
 
 The verdict is `regression`, `improvement` or `inconclusive`. Inconclusive means the bounds
 contain zero. It does not mean nothing changed: a small eval can be inconclusive about a large
@@ -109,14 +113,14 @@ drop, so the command says how large a drop it can't rule out:
 ```console
 $ signalfloor compare v1.jsonl v2.jsonl
 cases       20
-change      +0.0039  (95% CI -0.1306 to +0.1513)
-bounds      -0.1681 to +0.1513  (the interval widened for cases the eval may have missed)
+change      +0.0039  (bootstrap 95% CI -0.1306 to +0.1513)
+bounds      -0.2494 to +0.2740  (95% at any sample size, the calls below use these)
 
 verdict     inconclusive
-            the data can't rule out a drop of up to 0.1681
+            the data can't rule out a drop of up to 0.2494
 ```
 
-That is a 20 question eval, and a drop of 17 points could hide in it.
+That is a 20 question eval, and a drop of 25 points could hide in it.
 
 ### Gate a release on a margin
 
@@ -133,33 +137,36 @@ kept apart from the verdict:
 $ signalfloor compare v1.jsonl v2.jsonl --margin 0.02
 ...
 decision    needs more evidence (margin 0.02)
-            20 cases can't rule out a drop of 0.1684 even if nothing changed:
-            a change that broke 16.8% of cases could miss every one of them
-            a margin of 0.02 needs at least 183 cases
+            20 cases can't rule out a drop of 0.2167 even if nothing changed
+            when nothing changes, a margin of 0.02 needs at least 249 cases
 ```
 
-A margin needs enough cases, because a small eval can miss a change that breaks a few
-questions outright. With scores between 0 and 1:
+A small eval can't rule out much, because it can miss a change that breaks a few questions
+outright. When nothing changed at all, these are the cases it takes to pass, with scores
+between 0 and 1:
 
 | Margin | 0.01 | 0.02 | 0.03 | 0.05 | 0.10 |
 |---|---:|---:|---:|---:|---:|
-| Cases needed to pass | 368 | 183 | 122 | 72 | 36 |
+| Cases to pass an unchanged eval | 502 | 249 | 165 | 98 | 48 |
+
+These are not a floor for every eval. A clear improvement passes with fewer: 20 cases that
+all went from 0 to 1 pass a margin of 0.02. Any losses mean more.
 
 Needs more evidence fails a CI job too, because the eval was too small to show the change is
 safe. Add cases or accept a wider margin. Without `--margin` the command exits with code 1
-only for a proven regression.
+only for a regression.
 
 ### Does it work?
 
 A [validation study](studies/validation) planted changes of known size into the agent's real
 results, with three kinds of damage, and checked the result on 100 held-out questions. The
-usual rule, "fail if the mean dropped by more than the margin", shipped up to 47% of bad
-changes and failed up to 44% of acceptable ones. signalfloor's bounds shipped at most 1.2%
-and failed at most 1.7%.
+usual rule, "fail if the mean dropped by more than the margin", shipped up to 48% of bad
+changes and failed up to 42% of acceptable ones. signalfloor's bounds shipped at most 0.3%
+and failed at most 0.3%.
 
-The price is honesty about small evals. Below the cases a margin needs, signalfloor mostly
-says "needs more evidence": at margin 0.02 it approved 3% of acceptable changes at 100
-cases. At margin 0.05 it approved 53% at 100 cases and 71% at 200. Pick the margin and the
+The price is approval on small evals. At margin 0.05 signalfloor approved 24% of acceptable
+changes at 100 cases and 47% at 200, and almost none at 50 or fewer. The rest are "needs
+more evidence", which is the honest answer for an eval that small. Pick the margin and the
 eval size together.
 
 Run `signalfloor compare --help` to see all options, including `--format json` for machine

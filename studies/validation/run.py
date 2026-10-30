@@ -13,9 +13,9 @@ Two sets of real results, both from the reference agent's v1 prompt on HotpotQA:
 Each trial picks a baseline run and a candidate run (different runs when there are several,
 so real run-to-run noise is included), damages the candidate in a known way, draws an eval of
 n cases with replacement, and asks every rule for a release call at margins 0.02 and 0.05.
-A margin of 0.02 needs 183 cases to ever pass and 0.05 needs 72, so the two show the rules
-below and above that size. Each comparison uses 2,000 resamples to keep the run short. Three
-kinds of damage:
+When nothing changed, a margin of 0.02 needs 249 cases to pass with the betting bounds and
+0.05 needs 98, so the two show the rules below and above that size. Each comparison uses
+2,000 bootstrap resamples to keep the run short. Three kinds of damage:
 
 - break: random correct answers drop to F1 0. A change that breaks a subset.
 - partial: every answer loses the same share of its credit. A change that hurts a little
@@ -23,13 +23,17 @@ kinds of damage:
 - churn: 5% of wrong answers become right, and enough right answers break to reach the
   planted drop. Many cases move both ways, which is where false failures come from.
 
-Four rules see the same trials:
+Five rules see the same trials:
 
 - naive: fail when the mean dropped by more than the margin. What most eval checks do.
 - interval-only: pass when the bootstrap interval sits at or above -margin, fail when it sits
   below. signalfloor's first margin rule.
-- 0.3.0: interval-only, but passing also allows for cases the eval may have missed.
-- bounds: the current rule. Both ends widened past the most extreme differences seen.
+- 0.3.0: interval-only, but passing also allows for cases the eval may have missed (rule of
+  three).
+- 0.4.0: the bootstrap interval widened on both sides by the rule of three, past the most
+  extreme differences seen. Tagged but never published: a review showed it could fail an
+  unchanged eval of 7 cases 6.25% of the time.
+- betting: the current rule, a confidence interval by betting that holds at any sample size.
 """
 
 from __future__ import annotations
@@ -53,9 +57,9 @@ DATA = {
 
 PATTERNS = ("break", "partial", "churn")
 PLANTED_DROPS = (0.0, 0.01, 0.02, 0.03, 0.05, 0.08)
-EVAL_SIZES = (20, 50, 100, 200)
+EVAL_SIZES = (10, 20, 50, 100, 200)
 MARGINS = (0.02, 0.05)
-RULES = ("naive", "interval-only", "0.3.0", "bounds")
+RULES = ("naive", "interval-only", "0.3.0", "0.4.0", "betting")
 
 
 def classes(margin: float) -> tuple[tuple[float, ...], tuple[float, ...]]:
@@ -91,14 +95,17 @@ def decide(rule: str, row: dict[str, str], margin: float) -> str:
     """The release call each rule makes from one trial's numbers."""
     if rule == "naive":
         return Decision.FAIL if float(row["observed_drop"]) > margin else Decision.PASS
-    if rule == "bounds":
+    p = float(row["unseen_share"])
+    if rule == "betting":
         low, high = float(row["bound_low"]), float(row["bound_high"])
     else:
         low, high = float(row["ci_low"]), float(row["ci_high"])
+    if rule == "0.4.0":
+        low -= p * (float(row["min_diff"]) + 1)
+        high += p * (1 - float(row["max_diff"]))
     if high < -margin:
         return Decision.FAIL
     if rule == "0.3.0":
-        p = float(row["unseen_share"])
         low = (1 - p) * low - p
     return Decision.PASS if low >= -margin else Decision.NEEDS_MORE_EVIDENCE
 
@@ -124,7 +131,7 @@ def main() -> None:
     with out.open("w", newline="") as f:
         writer = csv.writer(f)
         columns = "pattern planted_drop n observed_drop ci_low ci_high unseen_share"
-        columns += " bound_low bound_high"
+        columns += " bound_low bound_high min_diff max_diff"
         writer.writerow(columns.split())
         for pattern in PATTERNS:
             for target in PLANTED_DROPS:
@@ -143,8 +150,12 @@ def main() -> None:
                             n_resamples=2_000,
                             seed=int(rng.integers(2**32)),
                         )
-                        numbers = (result.ci_low, result.ci_high, result.unseen_share)
-                        bounds = (result.bound_low, result.bound_high)
+                        # The share of cases an eval of n could miss (rule of three), which the
+                        # 0.3.0 and 0.4.0 rules used.
+                        unseen = 1 - 0.025 ** (1 / n)
+                        diffs = [candidate[i] - scores[b][i] for i in sample]
+                        numbers = (result.ci_low, result.ci_high, unseen)
+                        bounds = (result.bound_low, result.bound_high, min(diffs), max(diffs))
                         writer.writerow((pattern, target, n, -result.delta, *numbers, *bounds))
     summary = HERE / f"summary-{args.data}.md"
     summary.write_text(summarize(out, args.data, len(runs)))
