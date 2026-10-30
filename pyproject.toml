@@ -57,3 +57,7 @@ omit = ["*/__main__.py"]
 # SQLAlchemy's async layer runs database calls in greenlets. Without this, every line after an
 # await on the database is reported as never run.
 concurrency = ["greenlet", "thread"]
+
+[tool.coverage.report]
+# CI fails below this. The server tests need Postgres, so it holds for a full run only.
+fail_under = 100

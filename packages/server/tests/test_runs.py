@@ -329,8 +329,8 @@ def test_compare_only_the_shared_cases(client: TestClient) -> None:
 
 
 def test_a_candidate_cannot_pass_by_leaving_out_cases(client: TestClient) -> None:
-    # The review that found this: 200 cases pass in the baseline, the candidate has 190 of
-    # them, all passing. If it crashed on the other 10, that is a 0.05 drop.
+    # 200 cases pass in the baseline and the candidate has 190 of them, all passing. If it
+    # crashed on the other 10, that is a 0.05 drop, so leaving them out must not pass 0.02.
     baseline = upload(client, "full", [1.0] * 200)["id"]
     candidate = upload(client, "crashed", [1.0] * 190)["id"]
     url = f"/runs/{baseline}/compare/{candidate}"
@@ -436,8 +436,8 @@ def test_negative_margin_is_rejected(client: TestClient) -> None:
 def test_the_case_count_search_runs_off_the_event_loop(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The fourth review measured cases_needed(1e-20) at 1.8 seconds, on the request thread,
-    # which would stall every other request. anyio.from_thread only works in a worker thread.
+    # cases_needed(1e-20) takes seconds. On the request thread that would stall every other
+    # request. anyio.from_thread only works in a worker thread, so this fails on the loop.
     import anyio.from_thread
 
     from signalfloor_server import comparisons

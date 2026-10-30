@@ -163,8 +163,8 @@ def test_weighted_kappa_with_one_shared_label_is_undefined() -> None:
 
 
 def test_two_agreeing_cases_are_not_enough_to_trust() -> None:
-    # The review's example: two cases in perfect agreement used to come back trusted with an
-    # interval of exactly 1 to 1.
+    # Two cases in perfect agreement give a bootstrap interval of exactly 1 to 1, which must
+    # not count as trusted.
     labels = {"a": 0, "b": 1}
 
     result = judge_agreement(labels, labels, seed=0)

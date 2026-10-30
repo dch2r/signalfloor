@@ -246,8 +246,8 @@ def test_an_unchanged_eval_never_passes_a_zero_margin() -> None:
 def test_moving_or_stretching_the_scale_does_not_change_the_answer(
     shift: float, scale: float
 ) -> None:
-    # The review that found this: scores of 100.5 used to pass where 0.5 did not, because
-    # the score range was guessed from the scores seen.
+    # When the score range was guessed from the scores seen, constant scores of 100.5 passed a
+    # margin of 0 while the same scores at 0.5 did not.
     rng = np.random.default_rng(9)
     base = rng.uniform(0, 1, size=60)
     cand = np.clip(base - rng.choice([0.0, 0.3], size=60, p=[0.8, 0.2]), 0, 1)
@@ -287,9 +287,8 @@ def test_bad_score_ranges_are_refused(bad: tuple[float, float]) -> None:
 
 
 def test_two_losses_from_an_even_population_are_not_a_regression() -> None:
-    # The review that found this: half the cases go 1 -> 0, half go 0 -> 1, so nothing
-    # changed on average. Two cases drawn are both losses a quarter of the time, and the
-    # bootstrap interval is [-1, -1].
+    # Half the cases go 1 -> 0 and half go 0 -> 1, so nothing changed on average. Two cases
+    # drawn are both losses a quarter of the time, and the bootstrap interval is [-1, -1].
     result = paired_bootstrap({"a": 1, "b": 1}, {"a": 0, "b": 0}, seed=0, margin=0.02)
 
     assert (result.ci_low, result.ci_high) == (-1, -1)
@@ -298,9 +297,9 @@ def test_two_losses_from_an_even_population_are_not_a_regression() -> None:
 
 
 def test_six_losses_and_one_gain_are_not_a_fail() -> None:
-    # The second review found this one. The rule-of-three bounds fell back to the bootstrap
-    # once both extremes were seen, and failed it, which happens 6.25% of the time with
-    # seven cases when nothing changed.
+    # Bounds that widen the bootstrap only past the extremes seen fall back to the plain
+    # bootstrap here and fail it. With seven cases from an unchanged population that happens
+    # 6.25% of the time, well over the 2.5% a 95% interval allows.
     base = {f"c{i}": 1.0 for i in range(6)} | {"c6": 0.0}
     cand = {f"c{i}": 0.0 for i in range(6)} | {"c6": 1.0}
 
@@ -388,8 +387,8 @@ def test_bad_margins_are_rejected(margin: float) -> None:
 
 @pytest.mark.parametrize(("value", "end"), [(0.0, 0), (1.0, 1)])
 def test_constant_data_keeps_its_exact_end(value: float, end: int) -> None:
-    # The fourth review found the search stopping at 1e-9 and 1 - 1e-9, which left a
-    # population that is always 0 out of its own interval.
+    # A search that stops at 1e-9 and 1 - 1e-9 leaves a population that is always 0 out of
+    # its own interval.
     from signalfloor._betting import betting_interval
 
     low, high = betting_interval(np.full(10, value), 0.05)
@@ -414,3 +413,13 @@ def test_the_case_count_is_cached() -> None:
     cases_needed(0.02)
 
     assert cases_needed.cache_info().hits == 1
+
+
+def test_an_empty_interval_reports_the_mean(monkeypatch: pytest.MonkeyPatch) -> None:
+    # If the mean itself were rejected the interval would be empty. That has never happened
+    # on real data, so force it and check the result is the mean, not an invented range.
+    from signalfloor import _betting
+
+    monkeypatch.setattr(_betting, "_log_wealth", lambda data, bets, m: math.inf)
+
+    assert _betting.betting_interval(np.array([0.2, 0.4]), 0.05) == pytest.approx((0.3, 0.3))
