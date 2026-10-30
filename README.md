@@ -20,13 +20,24 @@ because they look small, or waste days chasing changes that were never there.
 
 signalfloor compares two eval runs and tells you if the difference is real.
 
-- It compares the two runs case by case and gives you a confidence interval for the change,
-  using a paired bootstrap.
+- It pairs the runs case by case and decides with a confidence interval by betting
+  ([Waudby-Smith and Ramdas, 2024](https://arxiv.org/abs/2010.09686)), which stays valid at
+  any sample size, even on 7 or 20 cases where a bootstrap goes badly wrong. A paired
+  bootstrap interval is shown next to it as a quick estimate, but no call is made from it.
+- With a margin, it gives a release decision: pass, fail, or needs more evidence, and says
+  how many cases the margin takes.
 - It measures how often your LLM judge agrees with human labels, so you know how far to trust
   its scores.
 - It finds flaky test cases, the ones whose scores change between two identical runs.
 - It reads OpenTelemetry traces, so you can use it alongside tools like Langfuse or Phoenix.
-- It runs in CI and fails a pull request only when a regression is statistically real.
+- It runs in CI and fails a pull request when a regression is shown, or, with a margin, when
+  the eval is too small to show the change is safe.
+
+**Does it work?** On 180,000 trials with regressions of known size planted into a real
+agent's results, the usual rule, "fail if the mean dropped by more than the margin", shipped
+up to 48% of bad changes and failed up to 42% of good ones on held-out questions. signalfloor
+kept both under 0.3%. The cost is that small evals often get "needs more evidence". The
+[validation study](studies/validation) has every rate, including that one.
 
 ## Install
 
