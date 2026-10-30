@@ -53,24 +53,45 @@ describe("VerdictBanner", () => {
     expect(screen.getByText(/100 shared cases with 10,000 resamples/)).toBeTruthy();
   });
 
-  it("draws an interval that clears zero for a real change", () => {
+  const crossesZero = (testId: string) => {
+    const bar = screen.getByTestId(testId);
+    const left = parseFloat(bar.style.left);
+    return left < 50 && left + parseFloat(bar.style.width) > 50;
+  };
+
+  it("draws bounds that clear zero for a real change", () => {
     render(<VerdictBanner comparison={comparison({})} />);
 
-    const bar = screen.getByTestId("interval");
-    expect(parseFloat(bar.style.left)).toBeGreaterThan(50);
+    expect(parseFloat(screen.getByTestId("bounds-bar").style.left)).toBeGreaterThan(50);
   });
 
-  it("draws an interval across zero when it is noise", () => {
+  it("draws bounds across zero when it is noise", () => {
     render(
       <VerdictBanner
-        comparison={comparison({ verdict: "inconclusive", delta: 0.01, ci_low: -0.03, ci_high: 0.05 })}
+        comparison={comparison({
+          verdict: "inconclusive",
+          delta: 0.01,
+          ci_low: -0.03,
+          ci_high: 0.05,
+          bound_low: -0.06,
+          bound_high: 0.08,
+        })}
       />,
     );
 
-    const bar = screen.getByTestId("interval");
-    const left = parseFloat(bar.style.left);
-    expect(left).toBeLessThan(50);
-    expect(left + parseFloat(bar.style.width)).toBeGreaterThan(50);
+    expect(crossesZero("bounds-bar")).toBe(true);
+  });
+
+  it("draws the bounds the verdict uses, even when the bootstrap bar clears zero", () => {
+    // The real v1 against v2 comparison: the bootstrap says better, the bounds can't tell.
+    render(
+      <VerdictBanner
+        comparison={comparison({ verdict: "inconclusive", bound_low: -0.0206, bound_high: 0.2012 })}
+      />,
+    );
+
+    expect(crossesZero("bounds-bar")).toBe(true);
+    expect(crossesZero("interval")).toBe(false);
   });
 });
 
