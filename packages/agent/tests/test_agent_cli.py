@@ -124,10 +124,13 @@ def test_build_retriever(
 
     monkeypatch.setattr(cli, "OpenAICompatibleEmbedder", fake_embedder)
     monkeypatch.setattr(cli, "default_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(manifest, "model_digest", lambda model, base_url: "sha256:emb")
 
     assert isinstance(cli.build_retriever(args(retriever=retriever), DATASET), expected)
     if retriever != "keyword":
         assert made[0]["document_prefix"] == "search_document: "
+        # The digest keys the embedding cache, so new weights never reuse old vectors.
+        assert made[0]["revision"] == "sha256:emb"
 
 
 def test_prefixes_only_for_nomic_models(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -139,6 +142,7 @@ def test_prefixes_only_for_nomic_models(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     monkeypatch.setattr(cli, "OpenAICompatibleEmbedder", fake_embedder)
     monkeypatch.setattr(cli, "default_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(manifest, "model_digest", lambda model, base_url: None)
 
     cli.build_retriever(args(embedding_model="all-minilm"), DATASET)
 
