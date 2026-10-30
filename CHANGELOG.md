@@ -6,6 +6,8 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-29
+
 ### Fixed
 
 - The betting interval stopped its search at 1e-9 and 1 - 1e-9, so data that was all 0 got
@@ -18,6 +20,9 @@ All notable changes to this project are listed here. The format follows
   or connection, and the tests that did reach out stub the model server instead.
 
 ## [0.5.0] - 2026-10-29
+
+Tagged but never published to PyPI. A review found the boundary issue fixed in 0.5.1
+before it went out, so the two ship together as 0.5.1.
 
 ### Changed
 
@@ -145,7 +150,8 @@ First release.
 - Text and JSON output for every command.
 - Exit code 1 when a check fails and 2 for bad input, so every command works as a CI check.
 
-[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/dch2r/signalfloor/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/dch2r/signalfloor/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/dch2r/signalfloor/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dch2r/signalfloor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/dch2r/signalfloor/compare/v0.2.0...v0.3.0
