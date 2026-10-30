@@ -9,15 +9,17 @@ parts:
 
 - identity: the settings that change the results. The prompt, the model and retrieval
   settings, the model and embedding model digests when the server reports them, the corpus,
-  and a hash of the agent's own code, which includes the scorer. A resume must match it.
+  and a hash of the agent's own code, which includes the scorer. A resume must match it
+  exactly. A digest that was unknown when the run started stays a mismatch if it becomes
+  known later: there is no way to show the earlier results came from the same weights.
 - questions: each question's id with a hash of its text, gold answer and supporting titles,
   in order. A resume must ask the same questions in the same order. It may ask for more or
   fewer, so a run can be extended, but the questions both lists have must be identical.
 - info: useful but not enforced, like the git commit and when the run started. A docs-only
   commit shouldn't block a resume, which is why the code is checked by its hash.
 
-What it can't see: a server that reports no digest can swap model weights behind the same
-name. Then the digests are None and only the name is checked.
+What it can't see: a server that never reports a digest can swap model weights behind the
+same name. Then the digests stay None and only the name is checked.
 """
 
 from __future__ import annotations
@@ -36,8 +38,6 @@ from signalfloor_agent.data import Passage, Question
 
 DATASET = "hotpotqa/hotpot_qa distractor validation"
 MANIFEST_VERSION = 2
-# Digests the server may not report. None means unknown, so it can't be checked.
-_DIGESTS = {"model_digest", "embedding_model_digest"}
 _PACKAGE = Path(__file__).parent
 # Test helpers live in the package but never run during an eval.
 _NOT_EVAL_CODE = {"testing.py"}
@@ -93,8 +93,17 @@ def git_commit() -> str | None:
     return result.stdout.strip() or None
 
 
+def ollama_name(model: str) -> str:
+    """The full name Ollama uses: a name without a tag means the latest tag."""
+    return model if ":" in model.rsplit("/", 1)[-1] else f"{model}:latest"
+
+
 def model_digest(model: str, base_url: str, client: httpx.Client | None = None) -> str | None:
-    """The model's digest from an Ollama server, or None for servers that don't report one."""
+    """The model's digest from an Ollama server, or None for servers that don't report one.
+
+    Ollama lists models with their tag, so nomic-embed-text is found as
+    nomic-embed-text:latest.
+    """
     root = base_url.removesuffix("/").removesuffix("/v1")
     try:
         with client or httpx.Client(timeout=5) as http:
@@ -104,7 +113,10 @@ def model_digest(model: str, base_url: str, client: httpx.Client | None = None) 
     except (httpx.HTTPError, ValueError, AttributeError):
         return None
     for entry in models:
-        if isinstance(entry, dict) and model in (entry.get("name"), entry.get("model")):
+        if not isinstance(entry, dict):
+            continue
+        names = {ollama_name(str(entry.get(k))) for k in ("name", "model") if entry.get(k)}
+        if ollama_name(model) in names:
             digest = entry.get("digest")
             return str(digest) if digest else None
     return None
@@ -150,11 +162,7 @@ def check_or_write(
             "questions or the model digests. Write this run to a new file."
         )
     saved = manifest["identity"]
-    changed = sorted(
-        k
-        for k in saved.keys() | identity.keys()
-        if saved.get(k) != identity.get(k) and not (k in _DIGESTS and saved.get(k) is None)
-    )
+    changed = sorted(k for k in saved.keys() | identity.keys() if saved.get(k) != identity.get(k))
     if changed:
         lines = [f"  {k}: {saved.get(k)!r} before, {identity.get(k)!r} now" for k in changed]
         raise ManifestMismatch(

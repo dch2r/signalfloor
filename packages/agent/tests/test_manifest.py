@@ -169,10 +169,46 @@ def test_a_digest_is_checked_once_it_is_known(tmp_path: Path) -> None:
         manifest.check_or_write(out, {"model_digest": None})
 
 
-def test_a_server_that_never_reported_a_digest_is_not_blocked(tmp_path: Path) -> None:
+def test_a_server_that_never_reports_a_digest_is_not_blocked(tmp_path: Path) -> None:
     out = started(tmp_path, {"model_digest": None}, [])
 
-    manifest.check_or_write(out, {"model_digest": "sha256:a"})
+    manifest.check_or_write(out, {"model_digest": None})
+
+
+def test_a_digest_that_was_unknown_at_the_start_never_counts_as_verified(tmp_path: Path) -> None:
+    # The second review found this: start unknown, then A, then B were all accepted, so a
+    # lookup that failed once left the run unchecked for good.
+    out = started(tmp_path, {"model_digest": None}, [])
+
+    with pytest.raises(manifest.ManifestMismatch, match="model_digest: None before, 'sha256:a'"):
+        manifest.check_or_write(out, {"model_digest": "sha256:a"})
+
+
+@pytest.mark.parametrize(
+    ("requested", "listed"),
+    [
+        ("nomic-embed-text", "nomic-embed-text:latest"),
+        ("nomic-embed-text:latest", "nomic-embed-text"),
+        ("qwen3:1.7b", "qwen3:1.7b"),
+        ("hf.co/org/model", "hf.co/org/model:latest"),
+    ],
+)
+def test_untagged_names_find_the_latest_tag(requested: str, listed: str) -> None:
+    # The second review found this: the default embedding model has no tag and Ollama lists
+    # it with one, so its digest was never found and never checked.
+    entry = {"name": listed, "model": listed, "digest": "sha256:e"}
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"models": [entry]}))
+
+    digest = manifest.model_digest(requested, "http://x/v1", httpx.Client(transport=transport))
+
+    assert digest == "sha256:e"
+
+
+def test_a_different_tag_is_a_different_model() -> None:
+    entry = {"name": "qwen3:8b", "digest": "sha256:big"}
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"models": [entry]}))
+
+    assert manifest.model_digest("qwen3", "http://x/v1", httpx.Client(transport=transport)) is None
 
 
 def test_manifests_from_before_question_checks_are_refused(tmp_path: Path) -> None:
