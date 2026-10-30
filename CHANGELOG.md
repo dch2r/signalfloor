@@ -6,6 +6,17 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The package description shows the margin workflow and every exit code, including 3 for
+  needs more evidence.
+
+### Fixed
+
+- The dashboard drew the bootstrap interval on its axis while the verdict came from the
+  bounds, so an inconclusive result could show a bar that cleared zero. The axis now draws the
+  bounds, with the bootstrap interval inside them.
+
 ## [0.5.1] - 2026-10-29
 
 ### Fixed

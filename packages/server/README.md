@@ -3,8 +3,8 @@
 The HTTP API for signalfloor. It stores eval runs in Postgres so they can be listed and compared
 later, instead of passing JSONL files around. This package is not published to PyPI.
 
-You upload each eval run once. Any two runs can then be compared with the same paired bootstrap
-as `signalfloor compare`, and the answer is the same to the last digit.
+You upload each eval run once. Any two runs can then be compared the same way as
+`signalfloor compare`, and the answer is the same to the last digit.
 
 ## Running it
 
@@ -35,7 +35,7 @@ The server reads its settings from environment variables:
 | `GET /runs` | List runs, newest first. Takes `limit`, `offset` and `label=key=value` filters. |
 | `GET /runs/{id}` | One run. |
 | `DELETE /runs/{id}` | Delete a run and its cases. |
-| `GET /runs/{baseline}/compare/{candidate}` | Paired bootstrap of candidate minus baseline. Takes `confidence`, `n_resamples` and `seed`. |
+| `GET /runs/{baseline}/compare/{candidate}` | Compare candidate with baseline: bootstrap interval, betting bounds, verdict and, with `margin`, a decision. Takes `confidence`, `n_resamples`, `seed`, `margin`, `score_low`, `score_high` and `shared_only`. |
 | `GET /runs/{baseline}/diff/{candidate}` | How many cases got worse, better or stayed the same, with the biggest drops and gains. Takes `limit`. |
 | `GET /runs/{id}/cases/{case_id}` | One case's score, with its trace if it has one. |
 | `POST /v1/traces` | OpenTelemetry trace ingestion over OTLP/HTTP. |
@@ -60,14 +60,19 @@ curl "localhost:8000/runs/<baseline id>/compare/<candidate id>?seed=0"
 ```
 
 ```json
-{"delta": 0.0835, "ci_low": 0.0115, "ci_high": 0.1595, "verdict": "improvement", ...}
+{"delta": 0.0835, "ci_low": 0.0115, "ci_high": 0.1595, "bound_low": -0.0206,
+ "bound_high": 0.2012, "verdict": "inconclusive", ...}
 ```
 
 That is the real result for the two prompt versions of the [reference agent](../agent/README.md).
+The verdict comes from the bounds, which hold at any sample size. They reach just below zero, so
+on 100 questions the gain is likely but not proven.
 
 Some limits keep one request from tying up the server. A run can have up to 100,000 cases and a
 comparison up to 100,000 resamples. Case ids must be unique within a run, and scores must be
-finite numbers. Two runs can only be compared if they have exactly the same case ids.
+finite numbers. Two runs can only be compared if they have exactly the same case ids, unless you pass
+`shared_only=true`. Then cases in only one run count as missing, and each widens the bounds
+as if it could have scored anything.
 
 ## Traces
 
@@ -151,7 +156,7 @@ startup. That's fine on your own machine and nowhere else.
 - **The dashboard has no login.** Anyone who can open it sees every run. Put it behind your own
   sign in, such as an SSO proxy or a VPN.
 - **There are no per client quotas.** Request sizes and comparison costs are capped, and
-  concurrent bootstraps are limited, but one client with a key can still keep the server busy.
+  concurrent comparisons are limited, but one client with a key can still keep the server busy.
 
 Per project access, a dashboard login and quotas would be the next steps toward a service
 shared by several teams.
