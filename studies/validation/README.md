@@ -102,9 +102,9 @@ Full tables, with every rule, pattern and size: [dev](summary-dev.md), [fresh](s
    interval, so they approve less. At margin 0.05 they approved 24% of acceptable changes at
    100 cases and 47% at 200. 0.4.0's heuristic approved 53% and 70%, but it also failed an
    unchanged 7 case eval 6.25% of the time. At 50 cases or fewer it approved at most 0.6% at
-   either margin, because an eval that small can't show a change is safe. Pick
-   the margin and eval size together. `signalfloor compare` prints the cases an unchanged
-   eval needs for your margin.
+   either margin, because an eval that small can't show a change is safe. The margin should
+   come from what a drop costs, so the fix is a larger eval, not a wider margin.
+   `signalfloor compare` prints the cases an unchanged eval needs for your margin.
 
 4. **Bad changes mostly get "needs more evidence", not "fail".** At 100 cases and margin
    0.05 the bounds failed 4% of bad changes and blocked the rest as needs more evidence.
