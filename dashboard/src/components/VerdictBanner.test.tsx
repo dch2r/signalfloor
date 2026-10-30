@@ -39,7 +39,7 @@ describe("VerdictBanner", () => {
   ])("shows %s as %s", (verdict, title) => {
     render(<VerdictBanner comparison={comparison({ verdict })} />);
 
-    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByText(`Change verdict: ${title}`)).toBeTruthy();
   });
 
   it("shows the numbers", () => {
@@ -153,9 +153,13 @@ describe("VerdictBanner wording", () => {
   });
 
   it.each([
-    ["pass", "Pass", "The bounds rule out a drop larger than 0.020."],
-    ["fail", "Fail", "The bounds put the drop above 0.020."],
-    ["needs_more_evidence", "Needs more evidence", "The data can't tell if the drop is within 0.020."],
+    ["pass", "Release decision: pass at margin 0.020", "The bounds rule out a drop larger than 0.020."],
+    ["fail", "Release decision: fail at margin 0.020", "The bounds put the drop above 0.020."],
+    [
+      "needs_more_evidence",
+      "Release decision: needs more evidence at margin 0.020",
+      "The data can't tell if the drop is within 0.020.",
+    ],
   ])("shows the %s decision", (decision, label, text) => {
     render(<VerdictBanner comparison={comparison({ margin: 0.02, decision })} />);
 

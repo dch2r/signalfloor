@@ -52,13 +52,14 @@ export function VerdictBanner({ comparison }: { comparison: Comparison }) {
   return (
     <section className={`rounded-lg border p-5 ${verdict.tone}`}>
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-lg font-semibold">{verdict.title}</p>
+        {/* One string each, so the server rendered HTML keeps the words together. */}
+        <p className="text-lg font-semibold">{`Change verdict: ${verdict.title}`}</p>
         {decision && (
           <span
             data-testid="decision"
             className={`rounded-full px-2.5 py-0.5 text-sm font-medium ${decision.tone}`}
           >
-            {decision.label}
+            {`Release decision: ${decision.label.toLowerCase()} at margin ${margin}`}
           </span>
         )}
       </div>

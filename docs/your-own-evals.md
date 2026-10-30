@@ -53,18 +53,22 @@ The margin is the largest drop in the mean score you would still ship. It is a p
 decision, so start from what a drop means to your users. A margin of 0.02 on accuracy means
 you accept losing 2 of every 100 answers.
 
-The margin and the eval size go together. A small margin needs many cases. When nothing
-changed, an eval needs about 98 cases to pass a margin of 0.05 and 249 to pass 0.02. The
-command prints the count for your margin when it can't decide. If your suite is smaller,
-either add cases or accept a wider margin.
+Choose it before you look at a result, and keep it fixed. Widening the margin after an eval
+comes back undecided only makes the check easier to pass, and says nothing new about the
+change.
+
+A small margin needs many cases. When nothing changed, an eval needs about 98 cases to pass a
+margin of 0.05 and 249 to pass 0.02. The command prints the count for your margin when it
+can't decide. If your suite is smaller, plan to grow it. Change the margin only if your
+product requirements change on their own.
 
 ## 5. Read the result
 
 | Result | What it means | What to do |
 |---|---|---|
-| pass (exit 0) | The data rules out a drop larger than the margin. | Ship. |
+| pass (exit 0) | The data rules out a drop larger than the margin. | This metric's release check passes. Other checks may still apply. |
 | fail (exit 1) | The data shows a drop larger than the margin. | Find what broke. The dashboard lists the cases that dropped most, or diff the two files by id. |
-| needs more evidence (exit 3) | The eval is too small to tell. | Add cases, accept a wider margin, or treat it as a fail. Don't rerun until it passes: that is choosing the answer. |
+| needs more evidence (exit 3) | The eval is too small to tell. | Collect more cases, or treat it as a fail. Don't rerun until it passes, and don't widen the margin to get a pass: both choose the answer. |
 
 Without `--margin` the command gives a verdict instead, regression, improvement or
 inconclusive, and exits 1 only for a regression.
@@ -81,7 +85,8 @@ cases you care about. Real suites bend this in two common ways:
   your traffic. The result is still correct for the suite.
 
 Rerunning the same setup also moves scores. Use `signalfloor flaky` on a few reruns to see how
-much, and set a margin above that noise band.
+much. The noise band tells you how much evidence you need, not where to set the margin: if
+reruns move more than your margin, average over several reruns or add cases.
 
 ## 7. Run it in CI
 

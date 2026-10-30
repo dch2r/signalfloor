@@ -10,6 +10,8 @@ All notable changes to this project are listed here. The format follows
 
 - The package description shows the margin workflow and every exit code, including 3 for
   needs more evidence.
+- The dashboard labels its two answers "Change verdict" and "Release decision", with the
+  margin, so an inconclusive verdict next to a pass reads as two separate questions.
 
 ### Fixed
 

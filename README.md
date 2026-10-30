@@ -67,8 +67,9 @@ decision    needs more evidence (margin 0.1)
 | fail | the upper bound is below `-margin` | 1 |
 | needs more evidence | anything else: 120 cases can't tell | 3 |
 
-Here 120 cases can't rule out a drop of 0.125, so a margin of 0.1 gets needs more evidence, and
-a margin of 0.2 would pass. [Using signalfloor on your own evals](docs/your-own-evals.md) covers
+Here 120 cases can't rule out a drop of 0.125, so a margin of 0.1 gets needs more evidence. The
+margin should come from what a drop would cost your users, chosen before you look at the
+result. When the eval can't decide, collect more cases rather than widen the margin. [Using signalfloor on your own evals](docs/your-own-evals.md) covers
 exporting your results, choosing a margin and what to do with each answer.
 
 ## What signalfloor does
@@ -132,11 +133,12 @@ often the judge agrees with you. Put the judge labels and the human labels in tw
 
 ```json
 {"id": "a-001", "label": 4}
-{"id": "a-002", "label": "good"}
+{"id": "a-002", "label": 2}
 ```
 
-Labels can be numbers, true/false or text. The example files are in the repository's
-[examples](examples) folder. Then run:
+Labels can be numbers, true/false or text, but one type throughout both files: a mix of
+numbers and text is refused. Weighted agreement, below, needs numbers. The example files are in
+the repository's [examples](examples) folder. Then run:
 
 ```console
 $ signalfloor calibrate examples/judge.jsonl examples/human.jsonl --weights quadratic
@@ -217,21 +219,27 @@ output.
 
 ## Run the whole stack
 
-With Docker installed, one command starts Postgres, the API, the background worker and the
-dashboard:
+The stack runs from a clone of the repository, not from the pip package. With Docker and git
+installed:
 
 ```bash
-docker compose up --build
+git clone https://github.com/dch2r/signalfloor.git
+cd signalfloor
+docker compose up --build -d
 ```
 
-Then load the reference agent's real runs, with Python 3 from the repository root:
+That starts Postgres, the API, the background worker and the dashboard in the background. The
+first build takes a few minutes. Wait until the API reports ready, then load the reference
+agent's real runs:
 
 ```bash
+until curl -fs localhost:8000/health/ready; do sleep 2; done
 python3 scripts/load-demo-data.py
 ```
 
-It prints a link to a comparison of the two prompt versions. Open http://localhost:3000 for the
-dashboard and http://localhost:8000/docs for the API.
+The loader prints a link to a comparison of the two prompt versions. Open
+http://localhost:3000 for the dashboard and http://localhost:8000/docs for the API.
+`docker compose down` stops everything, and adding `-v` also deletes the data.
 
 ![The compare page for the two prompt versions: inconclusive, with the bounds crossing zero while the bootstrap interval does not](docs/images/compare.png)
 
