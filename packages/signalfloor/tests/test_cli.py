@@ -463,3 +463,14 @@ def test_shows_the_bounds_and_puts_them_in_json(
     result = json.loads(capsys.readouterr().out)
     assert result["bound_low"] < result["ci_low"] <= result["ci_high"] < result["bound_high"] < 0
     assert result["largest_drop_not_ruled_out"] == pytest.approx(-result["bound_low"])
+
+
+def test_a_zero_margin_says_no_case_count_can_pass_it(
+    runs: dict[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["compare", runs["base"], runs["same"], "--seed", "0", "--margin", "0"])
+
+    out = capsys.readouterr().out
+    assert "decision    needs more evidence (margin 0)" in out
+    assert "80 cases can't rule out a drop of 0.0605 even if nothing changed" in out
+    assert "needs at least" not in out

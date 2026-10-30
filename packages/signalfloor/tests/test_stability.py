@@ -77,8 +77,8 @@ def test_noise_floor_formula_on_a_small_example() -> None:
 
 
 def test_runs_that_move_together_widen_the_band() -> None:
-    # The review's example: 100 cases that all flip together across four runs. Treating the
-    # cases as independent gave a band of 0.16 while the run means swing between 0 and 1.
+    # 100 cases that all flip together across four runs. Treating the cases as independent
+    # gives a band of 0.16 while the run means swing between 0 and 1.
     runs = [run([float(r % 2)] * 100) for r in range(4)]
 
     result = find_flaky(runs)

@@ -176,8 +176,8 @@ def test_a_server_that_never_reports_a_digest_is_not_blocked(tmp_path: Path) -> 
 
 
 def test_a_digest_that_was_unknown_at_the_start_never_counts_as_verified(tmp_path: Path) -> None:
-    # The second review found this: start unknown, then A, then B were all accepted, so a
-    # lookup that failed once left the run unchecked for good.
+    # If unknown counted as matching anything, a run could start unknown, resume with A and
+    # then with B, so one failed lookup would leave it unchecked for good.
     out = started(tmp_path, {"model_digest": None}, [])
 
     with pytest.raises(manifest.ManifestMismatch, match="model_digest: None before, 'sha256:a'"):
@@ -194,8 +194,8 @@ def test_a_digest_that_was_unknown_at_the_start_never_counts_as_verified(tmp_pat
     ],
 )
 def test_untagged_names_find_the_latest_tag(requested: str, listed: str) -> None:
-    # The second review found this: the default embedding model has no tag and Ollama lists
-    # it with one, so its digest was never found and never checked.
+    # The default embedding model has no tag and Ollama lists it with one. An exact match
+    # never finds its digest, so it would never be checked.
     entry = {"name": listed, "model": listed, "digest": "sha256:e"}
     transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"models": [entry]}))
 
@@ -241,3 +241,12 @@ def test_question_fingerprints_cover_text_answer_and_supporting_facts() -> None:
     assert manifest.question_fingerprints([dataclasses.replace(base, level="easy")]) == [
         ["q0", original]
     ]
+
+
+def test_entries_that_are_not_objects_are_skipped() -> None:
+    models = ["junk", {"name": "qwen3:1.7b", "digest": "sha256:q"}]
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"models": models}))
+
+    assert manifest.model_digest(
+        "qwen3:1.7b", "http://x/v1", httpx.Client(transport=transport)
+    ) == ("sha256:q")
