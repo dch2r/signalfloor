@@ -16,7 +16,7 @@ dependencies = [
     "numpy>=1.26",
     "opentelemetry-api>=1.45.1",
     "opentelemetry-exporter-otlp-proto-http>=1.45.1",
-    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-sdk>=1.45.2",
 ]
 
 [project.scripts]
