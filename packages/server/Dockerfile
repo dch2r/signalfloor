@@ -3,7 +3,7 @@
 #
 #   docker build -f packages/server/Dockerfile -t signalfloor-server .
 
-FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb AS build
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 COPY --from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 /uv /bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
@@ -22,7 +22,7 @@ COPY packages/server packages/server
 # nothing but the environment.
 RUN uv sync --locked --no-dev --package signalfloor-server --no-editable
 
-FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 # A fixed, unprivileged uid that can't log in. Kubernetes can then check runAsNonRoot.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin signalfloor
 COPY --from=build /app/.venv /app/.venv
